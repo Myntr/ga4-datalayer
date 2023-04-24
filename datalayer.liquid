@@ -1,0 +1,465 @@
+<script>
+  /*
+    ABOUT
+    --------
+    Myntr DataLayer
+    v1.0
+
+    DESCRIPTION
+    -------------
+    This file handles implementation of GA4 in Shopify themes.
+    This file includes:
+    - Measuring transactions on the order confirmation page
+    - Measuring the cart and checkout
+    - Measuring adds to and removes from the cart
+    - Measuring product detail views
+    - Measuring product clicks
+    - Measuring product impressions
+    - Measuring adds to the wishlist
+    - Measuring promotion clicks
+    - Measuring promotion impressions
+    - Measuring user interactions via event tracking
+
+
+    REQUIREMENTS
+    --------------
+    1. GTM scripts added to <head> and <body> tags within theme.liquid to establish data layer and GTM on every page
+  */
+
+
+  /*
+  =========================================================================================
+    GLOBAL VARIABLES AND SELECTORS
+  =========================================================================================
+  */
+
+  window.dataLayer = window.dataLayer || []; // init data layer if it does not already exist
+
+  const dl_currency_code = 'USD';
+
+  let myntrSelectors = {
+    viewCart: ['form[action="/cart"]'],
+    checkoutCart: ['form[action="/checkout"]'],
+    cartTriggers: ['form[action="/cart/add"] [type="submit"],'],
+    removeCartTrigger: ['[href*="/cart/change"]'],
+    promoSubscriptionsSelectors: [],
+    promoSuccess: [],
+    ctaSelectors: [],
+    newsletterSelectors: ['input.contact_email'],
+    newsletterSuccess: ['.success_message'],
+    searchPage: ['search'],
+    wishlistSelector: [],
+    removeWishlist: [],
+    wishlistPage: []
+  };
+
+
+  let myntrAnalytics = {
+    dynamicCart: true,  // if cart is dynamic (meaning no refresh on cart add) set to true
+    debug: false, // if true, console messages will be displayed
+    cart: null,
+    wishlist: null,
+    removeCart: null,
+    enhancedEcommerce: true // send google analytics formatted ecommerce data to the datalayer
+  };
+
+  /*
+  =========================================================================================
+    PAGE VIEW
+  =========================================================================================
+  */
+
+  // Fire on all page views
+
+  const dl_template_name = '{{ template }}'; // home page, product detail page, terms & conditions, cart page, etc.
+  const dl_customer_id = '{{ customer.id }}';
+  const dl_login_status = {% if customer %}true{% else %}false{% endif %};
+  const dl_membership_status = ''; // TODO: determine info on this
+
+  dataLayer.push({
+    'event': 'page_view',
+    'page_type': dl_template_name,
+    'page_category': '[[page category]]',       // TODO: determine info on this
+    'page_subcategory': '[[page subcategory]]', // TODO: determine info on this
+    'page_collection': '[[page collection]]',   // TODO: determine info on this
+    'user_id': dl_customer_id,
+    'login_status': dl_login_status,
+    'membership_status': dl_membership_status
+  });
+
+
+  /*
+  =========================================================================================
+    PRODUCT DETAIL VIEW
+  =========================================================================================
+  */
+
+  // Fire on page load of product detail page.
+
+  {% if template contains 'product' %}
+
+    const dl_pdv_product_name = '{{ product.title }}';
+    const dl_pdv_product_id = '{{ product.id }}'
+    const dl_pdv_quantity = 1;
+    const dl_pdv_price = {{ product.price }}; // final product price (TODO: get variant price?)
+    const dl_pdv_regular_price = {% if product.compare_at_price %}{{ product.compare_at_price }}{% else %}{{ product.price }}{% endif %};
+    const dl_pdv_item_category = '{{ product.product_type }}'; //use product type as main category
+    const dl_pdv_item_category2 = '';  //TODO: use metafields on each product to determine category
+    const dl_pdv_item_category3 = '';  //TODO: use metafields on each product to determine category
+    const dl_pdv_item_category4 = '';  //TODO: use metafields on each product to determine category
+    const dl_pdv_item_category5 = '';  //TODO: use metafields on each product to determine category
+    const dl_pdv_brand = '{{ product.vendor }}';
+
+    dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+    dataLayer.push({
+      'event': 'view_item',
+      'ecommerce': {
+        'currency': dl_currency_code,
+        'items': [
+          {
+            'item_name': dl_pdv_product_name,
+            'item_id': dl_pdv_product_id,
+            'affiliation': '[[PRODUCT AFFILIATION]]',  // TODO: determine info on this
+            'quantity': dl_pdv_quantity,
+            'price': dl_pdv_price,
+            'item_category': dl_pdv_item_category,
+            'item_category2': dl_pdv_item_category2,
+            'item_category3': dl_pdv_item_category3,
+            'item_category4': dl_pdv_item_category4,
+            'item_category5': dl_pdv_item_category5,
+            'brand': dl_pdv_brand,
+            'variant' '[[PRODUCT VARIANT]]',
+            'item_list_name': '[[PRODUCT LIST NAME]]',  //TODO: is this needed for Product Detail View?
+            'item_list_id': '[[PRODUCT LIST ID]]',      //TODO: is this needed for Product Detail View?
+            'item_sale_status': '[[SALE STATUS]]',      //TODO: is this needed for Product Detail View?
+            'item_color': '[[COLOR]]',
+            'item_size': '[[SIZE]]',
+            'item_regular_price': '[[REGULAR PRICE]]', //doesn’t reflect discount price
+            'item_star_rating': '[[STAR RATING]]',
+            'item_number_reviews': '[[NUMBER REVIEWS]]',
+            'item_color_position': [[COLOR POSITION]]  //TODO: determine selected swatch index if swatches exist
+          }
+        ]
+      }
+    });
+
+  {% endif %}
+
+
+  /*
+  =========================================================================================
+    PRODUCT - ADD TO CART
+  =========================================================================================
+  */
+
+  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  dataLayer.push({
+    'event': 'add_to_cart',
+    'add_to_cart_location': '[[ADD TO CART LOCATION]]',  // “Product Page Add To Cart”, “Product List Page Quick Add”, “Shopping Bag Add On”, “Shopping Bag Quantity Increase”, “Cart Page Quantity Increase”
+    'ecommerce': {
+      'currency': dl_currency_code,
+      'items': [ // Array of Item Objects for each product added
+        {
+          'item_name': '[[PRODUCT NAME]]',
+          'item_id': '[[PRODUCT ID]]',
+          'affiliation': '[[PRODUCT AFFILIATION]]',
+          'quantity': [[QUANTITY]],
+          'price': [[PRODUCT PRICE]],
+          'item_category': '[[PRODUCT CATEGORY]]',
+          'item_category2': '[[PRODUCT COLLECTION]]',
+          'item_category3': '[[PRODUCT CATEGORY 3]]',
+          'item_category4': '[[PRODUCT CATEGORY 4]]',
+          'item_category5': '[[PRODUCT CATEGORY 5]]',
+          'brand': '[[PRODUCT BRAND]]',
+          'variant' '[[PRODUCT VARIANT]]',
+          'item_list_name': '[[PRODUCT LIST NAME]]', // When in list
+          'item_list_id': '[[PRODUCT LIST ID]]', // When in list
+          'item_sale_status': [[SALE STATUS]]',
+          'item_color': [[COLOR]]',
+          'item_size': [[SIZE]]',
+          'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
+          'item_star_rating': [[STAR RATING]]',
+          'item_number_reviews': [[NUMBER REVIEWS]]',
+          'item_color_position': [[COLOR POSITION]]'
+        },
+      ]
+    }
+  });
+
+
+
+  /*
+  =========================================================================================
+    PRODUCT - REMOVE FROM CART
+  =========================================================================================
+  */
+
+  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  dataLayer.push({
+    'event': 'remove_from_cart',
+    'ecommerce': {
+      'currency': dl_currency_code,
+      'items': [ // Array of Item Objects for each product removed
+        {
+          'item_name': '[[PRODUCT NAME]]',
+          'item_id': '[[PRODUCT ID]]',
+          'affiliation': '[[PRODUCT AFFILIATION]]',
+          'quantity': [[QUANTITY]],
+          'price': [[PRODUCT PRICE]],
+          'item_category': '[[PRODUCT CATEGORY]]',
+          'item_category2': '[[PRODUCT COLLECTION]]',
+          'item_category3': '[[PRODUCT CATEGORY 3]]',
+          'item_category4': '[[PRODUCT CATEGORY 4]]',
+          'item_category5': '[[PRODUCT CATEGORY 5]]',
+          'brand': '[[PRODUCT BRAND]]',
+          'variant' '[[PRODUCT VARIANT]]',
+          'item_sale_status': [[SALE STATUS]]',
+          'item_color': [[COLOR]]',
+          'item_size': [[SIZE]]',
+          'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
+          'item_star_rating': [[STAR RATING]]',
+          'item_number_reviews': [[NUMBER REVIEWS]]',
+          'item_color_position': [[COLOR POSITION]]'
+        },
+      ]
+    }
+  });
+
+
+  /*
+  =========================================================================================
+    PRODUCT - QUANTITY INCREMENT
+  =========================================================================================
+  */
+
+    // use add to cart dataLayer push
+
+  /*
+  =========================================================================================
+    PRODUCT - QUANTITY DECREMENT
+  =========================================================================================
+  */
+
+    // use remove from cart dataLayer push
+
+
+
+  /*
+  =========================================================================================
+    PRODUCT CLICK
+  =========================================================================================
+  */
+
+  // Fire this on a product click, such as on product list pages, product carousels, product suggestions, etc...
+
+  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  dataLayer.push({
+    'event': 'select_item',
+    'filters_applied' : '[[FILTER TYPE]]:[[FILTER VALUE]]', // For use on PLP. Use a colon (:) to separate the filter type/value text and a pipe (|) to delimit multiple filter combinations applied.  Note there is a 100 character limit so prioritize filter values accordingly
+    'ecommerce': {
+      'currency': dl_currency_code,
+      'items': [
+        {
+          'item_name': '[[PRODUCT NAME]]',
+          'item_id': '[[PRODUCT ID]]',
+          'affiliation': '[[PRODUCT AFFILIATION]]',
+          'quantity': [[QUANTITY]],
+          'price': [[PRODUCT PRICE]],
+          'item_category': '[[PRODUCT CATEGORY]]',
+          'item_category2': '[[PRODUCT COLLECTION]]',
+          'item_category3': '[[PRODUCT CATEGORY 3]]',
+          'item_category4': '[[PRODUCT CATEGORY 4]]',
+          'item_category5': '[[PRODUCT CATEGORY 5]]',
+          'brand': '[[PRODUCT BRAND]]',
+          'variant' '[[PRODUCT VARIANT]]',
+          'item_list_name': '[[PRODUCT LIST NAME]]',
+          'item_list_id': '[[PRODUCT LIST ID]]',
+          'item_sale_status': [[SALE STATUS]]',
+          'item_color': [[COLOR]]',
+          'item_size': [[SIZE]]',
+          'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
+          'item_star_rating': [[STAR RATING]]',
+          'item_number_reviews': [[NUMBER REVIEWS]]',
+          'item_color_position': [[COLOR POSITION]]'
+        },
+      ]
+    }
+  });
+
+
+  /*
+  =========================================================================================
+    PRODUCT LIST VIEW
+  =========================================================================================
+  */
+
+  // When products become visible within the viewport we will fire the following event.
+  // It should include all products that are in viewport. Products should only be sent once per view per page when viewed in a list.
+  // includes homepage product sliders, PLP, PDP suggest products, minicart upsell sliders
+
+  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  dataLayer.push({
+    'event': 'view_item_list',
+    'ecommerce': {
+      'currency': dl_currency_code,
+      'items': [
+        {
+          'item_name': '[[PRODUCT NAME]]',
+          'item_id': '[[PRODUCT ID]]',
+          'affiliation': '[[PRODUCT AFFILIATION]]',
+          'quantity': [[QUANTITY]],
+          'price': [[PRODUCT PRICE]],
+          'item_category': '[[PRODUCT CATEGORY]]',
+          'item_category2': '[[PRODUCT COLLECTION]]',
+          'item_category3': '[[PRODUCT CATEGORY 3]]',
+          'item_category4': '[[PRODUCT CATEGORY 4]]',
+          'item_category5': '[[PRODUCT CATEGORY 5]]',
+          'brand': '[[PRODUCT BRAND]]',
+          'variant' '[[PRODUCT VARIANT]]',
+          'item_list_name': '[[PRODUCT LIST NAME]]',
+          'item_list_id': '[[PRODUCT LIST ID]]',
+          'item_sale_status': [[SALE STATUS]]',
+          'item_color': [[COLOR]]',
+          'item_size': [[SIZE]]',
+          'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
+          'item_star_rating': [[STAR RATING]]',
+          'item_number_reviews': [[NUMBER REVIEWS]]',
+          'item_color_position': [[COLOR POSITION]]'
+        },
+      ]
+    }
+  });
+
+
+
+  /*
+  =========================================================================================
+    PROMOTION VIEW
+  =========================================================================================
+  */
+
+  // When promotions become visible within the viewport we will fire the following event.
+  // It should include all promotions that are in viewport. Promotions should only be sent once per view per page.
+
+
+  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  dataLayer.push({
+    'event': 'view_promotion',
+    'ecommerce': {
+      'items': [
+        {
+          'promotion_id': '[[PROMOTION ID]]',
+          'promotion_name': '[[PROMOTION NAME]]',
+          'creative_name': '[[CREATIVE NAME]]',
+          'creative_slot': [[CREATIVE SLOT]]',
+          'location_id': [[LOCATION ID]]',
+          [[PRODUCT DATA]] // If promotion is for a specific product
+        },
+      ]
+    }
+  });
+
+
+  /*
+  =========================================================================================
+    PROMOTION CLICK
+  =========================================================================================
+  */
+
+  //Fire on click of a promotion
+
+  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  dataLayer.push({
+    'event': 'select_promotion',
+    'ecommerce': {
+      'items': [
+        {
+          'promotion_id': '[[PROMOTION ID]]',
+          'promotion_name': '[[PROMOTION NAME]]',
+          'creative_name': '[[CREATIVE NAME]]',
+          'creative_slot': [[CREATIVE SLOT]]',
+          'location_id': [[LOCATION ID]]',
+          [[PRODUCT DATA]] // If promotion is for a specific product
+        },
+      ]
+    }
+  });
+
+
+  /*
+  =========================================================================================
+    EMAIL OPT IN
+  =========================================================================================
+  */
+
+  // Fires when user subscribes to email newsletter
+
+  dataLayer.push({
+    'event': 'email_optin'
+  });
+
+
+  /*
+  =========================================================================================
+    ACCOUNT REGISTER
+  =========================================================================================
+  */
+
+  // Fires when user subscribes to email newsletter
+
+  dataLayer.push({
+    'event': 'account_register'
+  });
+
+
+  /*
+  =========================================================================================
+    ACCOUNT LOG IN
+  =========================================================================================
+  */
+
+  // Fires when user subscribes to email newsletter
+
+  dataLayer.push({
+    'event': 'account_login'
+  });
+
+
+
+  /*
+  =========================================================================================
+    NAVIGATION CLICK
+  =========================================================================================
+  */
+
+  // Fires when a navigation element is clicked
+
+  dataLayer.push({
+    'event': 'navigation_click',
+    'click_location' : '[[CLICK LOCATION]]'
+    'link_text' : '[[LINK TEXT]]',
+    'destination_url' : '[[DESTINATION URL]]'
+  });
+
+
+
+
+  /*
+  =========================================================================================
+    TRANSACTIONS
+  =========================================================================================
+  */
+
+    // after order is placed. additional scripts in admin is likely
+
+
+
+  /*
+  =========================================================================================
+    CHECKOUT PAGE EVENTS
+  =========================================================================================
+  */
+
+    //add to checkout.liquid for now...but need plan for Q2 2024
+
+</script>
