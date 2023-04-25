@@ -38,10 +38,13 @@
   const dl_currency_code = 'USD';
 
   let myntrSelectors = {
-    viewCart: ['form[action="/cart"]'],
-    checkoutCart: ['form[action="/checkout"]'],
-    cartTriggers: ['form[action="/cart/add"] [type="submit"],'],
-    removeCartTrigger: ['[href*="/cart/change"]'],
+    cartForm: ['form[action="/cart"]'],
+    checkoutCartForm: ['form[action="/checkout"]'],
+    cartSubmitTrigger: ['form[action="/cart/add"] [type="submit"],'],
+    cartIncreaseQtyTrigger: ['.js-quantity-increase.cart-qty'],
+    cartDecreaseQtyTrigger: ['.js-quantity-decrease.cart-qty'],
+    cartRemoveTrigger: ['.js-remove'],
+    addToCartTrigger: ['.js-ajax-add'],
     promoSubscriptionsSelectors: [],
     promoSuccess: [],
     ctaSelectors: [],
@@ -52,7 +55,6 @@
     removeWishlist: [],
     wishlistPage: []
   };
-
 
   let myntrAnalytics = {
     dynamicCart: true,  // if cart is dynamic (meaning no refresh on cart add) set to true
@@ -79,9 +81,9 @@
   dataLayer.push({
     'event': 'page_view',
     'page_type': dl_template_name,
-    'page_category': '[[page category]]',       // TODO: determine info on this
-    'page_subcategory': '[[page subcategory]]', // TODO: determine info on this
-    'page_collection': '[[page collection]]',   // TODO: determine info on this
+    'page_category': '',       // TODO: determine info on this
+    'page_subcategory': '',   // TODO: determine info on this
+    'page_collection': '',   // TODO: determine info on this
     'user_id': dl_customer_id,
     'login_status': dl_login_status,
     'membership_status': dl_membership_status
@@ -119,7 +121,7 @@
           {
             'item_name': dl_pdv_product_name,
             'item_id': dl_pdv_product_id,
-            'affiliation': '[[PRODUCT AFFILIATION]]',  // TODO: determine info on this
+            'affiliation': '',                        // TODO: determine info on this
             'quantity': dl_pdv_quantity,
             'price': dl_pdv_price,
             'item_category': dl_pdv_item_category,
@@ -152,40 +154,51 @@
   =========================================================================================
   */
 
-  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
-  dataLayer.push({
-    'event': 'add_to_cart',
-    'add_to_cart_location': '[[ADD TO CART LOCATION]]',  // “Product Page Add To Cart”, “Product List Page Quick Add”, “Shopping Bag Add On”, “Shopping Bag Quantity Increase”, “Cart Page Quantity Increase”
-    'ecommerce': {
-      'currency': dl_currency_code,
-      'items': [ // Array of Item Objects for each product added
-        {
-          'item_name': '[[PRODUCT NAME]]',
-          'item_id': '[[PRODUCT ID]]',
-          'affiliation': '[[PRODUCT AFFILIATION]]',
-          'quantity': [[QUANTITY]],
-          'price': [[PRODUCT PRICE]],
-          'item_category': '[[PRODUCT CATEGORY]]',
-          'item_category2': '[[PRODUCT COLLECTION]]',
-          'item_category3': '[[PRODUCT CATEGORY 3]]',
-          'item_category4': '[[PRODUCT CATEGORY 4]]',
-          'item_category5': '[[PRODUCT CATEGORY 5]]',
-          'brand': '[[PRODUCT BRAND]]',
-          'variant' '[[PRODUCT VARIANT]]',
-          'item_list_name': '[[PRODUCT LIST NAME]]', // When in list
-          'item_list_id': '[[PRODUCT LIST ID]]', // When in list
-          'item_sale_status': [[SALE STATUS]]',
-          'item_color': [[COLOR]]',
-          'item_size': [[SIZE]]',
-          'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
-          'item_star_rating': [[STAR RATING]]',
-          'item_number_reviews': [[NUMBER REVIEWS]]',
-          'item_color_position': [[COLOR POSITION]]'
-        },
-      ]
-    }
-  });
+  // Fires when product is added to cart  (pdp, plp, etc)
 
+  const addToCartTriggers = document.querySelectorAll(myntrSelectors.addToCartTrigger);
+
+  addToCartTriggers.forEach((trigger) => {
+    trigger.addEventListener('click', () => {
+      if(myntrAnalytics.debug) console.log("DataLayer: Add to Cart Triggered");
+
+      dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+
+      dataLayer.push({
+        'event': 'add_to_cart',
+        'add_to_cart_location': '[[ADD TO CART LOCATION]]',  // “Product Page Add To Cart”, “Product List Page Quick Add”, “Shopping Bag Add On”, “Shopping Bag Quantity Increase”, “Cart Page Quantity Increase”
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': [ // Array of Item Objects for each product added
+            {
+              'item_name': '[[PRODUCT NAME]]',
+              'item_id': '[[PRODUCT ID]]',
+              'affiliation': '[[PRODUCT AFFILIATION]]',
+              'quantity': [[QUANTITY]],
+              'price': [[PRODUCT PRICE]],
+              'item_category': '[[PRODUCT CATEGORY]]',
+              'item_category2': '[[PRODUCT COLLECTION]]',
+              'item_category3': '[[PRODUCT CATEGORY 3]]',
+              'item_category4': '[[PRODUCT CATEGORY 4]]',
+              'item_category5': '[[PRODUCT CATEGORY 5]]',
+              'brand': '[[PRODUCT BRAND]]',
+              'variant' '[[PRODUCT VARIANT]]',
+              'item_list_name': '[[PRODUCT LIST NAME]]', // When in list
+              'item_list_id': '[[PRODUCT LIST ID]]', // When in list
+              'item_sale_status': [[SALE STATUS]]',
+              'item_color': [[COLOR]]',
+              'item_size': [[SIZE]]',
+              'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
+              'item_star_rating': [[STAR RATING]]',
+              'item_number_reviews': [[NUMBER REVIEWS]]',
+              'item_color_position': [[COLOR POSITION]]'
+            }
+          ]
+        }
+      });
+
+    });
+  });
 
 
   /*
@@ -194,35 +207,46 @@
   =========================================================================================
   */
 
-  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
-  dataLayer.push({
-    'event': 'remove_from_cart',
-    'ecommerce': {
-      'currency': dl_currency_code,
-      'items': [ // Array of Item Objects for each product removed
-        {
-          'item_name': '[[PRODUCT NAME]]',
-          'item_id': '[[PRODUCT ID]]',
-          'affiliation': '[[PRODUCT AFFILIATION]]',
-          'quantity': [[QUANTITY]],
-          'price': [[PRODUCT PRICE]],
-          'item_category': '[[PRODUCT CATEGORY]]',
-          'item_category2': '[[PRODUCT COLLECTION]]',
-          'item_category3': '[[PRODUCT CATEGORY 3]]',
-          'item_category4': '[[PRODUCT CATEGORY 4]]',
-          'item_category5': '[[PRODUCT CATEGORY 5]]',
-          'brand': '[[PRODUCT BRAND]]',
-          'variant' '[[PRODUCT VARIANT]]',
-          'item_sale_status': [[SALE STATUS]]',
-          'item_color': [[COLOR]]',
-          'item_size': [[SIZE]]',
-          'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
-          'item_star_rating': [[STAR RATING]]',
-          'item_number_reviews': [[NUMBER REVIEWS]]',
-          'item_color_position': [[COLOR POSITION]]'
-        },
-      ]
-    }
+  // Fires when product is removed from cart
+
+  const cartRemoveTriggers = document.querySelectorAll(myntrSelectors.cartRemoveTrigger);
+
+  cartRemoveTriggers.forEach((trigger) => {
+    trigger.addEventListener('click', () => {
+      if(myntrAnalytics.debug) console.log("DataLayer: Remove from Cart Triggered");
+
+      dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+      dataLayer.push({
+        'event': 'remove_from_cart',
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': [ // Array of Item Objects for each product removed
+            {
+              'item_name': '[[PRODUCT NAME]]',
+              'item_id': '[[PRODUCT ID]]',
+              'affiliation': '[[PRODUCT AFFILIATION]]',
+              'quantity': [[QUANTITY]],
+              'price': [[PRODUCT PRICE]],
+              'item_category': '[[PRODUCT CATEGORY]]',
+              'item_category2': '[[PRODUCT COLLECTION]]',
+              'item_category3': '[[PRODUCT CATEGORY 3]]',
+              'item_category4': '[[PRODUCT CATEGORY 4]]',
+              'item_category5': '[[PRODUCT CATEGORY 5]]',
+              'brand': '[[PRODUCT BRAND]]',
+              'variant' '[[PRODUCT VARIANT]]',
+              'item_sale_status': [[SALE STATUS]]',
+              'item_color': [[COLOR]]',
+              'item_size': [[SIZE]]',
+              'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
+              'item_star_rating': [[STAR RATING]]',
+              'item_number_reviews': [[NUMBER REVIEWS]]',
+              'item_color_position': [[COLOR POSITION]]'
+            },
+          ]
+        }
+      });
+
+    });
   });
 
 
@@ -232,7 +256,19 @@
   =========================================================================================
   */
 
-    // use add to cart dataLayer push
+  // Fires when user increases cart item quantity
+
+  const cartIncreaseQtyTriggers = document.querySelectorAll(myntrSelectors.cartIncreaseQtyTrigger);
+
+  cartIncreaseQtyTriggers.forEach((trigger) => {
+    trigger.addEventListener('click', () => {
+      if(myntrAnalytics.debug) console.log("DataLayer: Cart Item Quantity Increase Triggered");
+
+      //TODO
+
+    });
+  });
+
 
   /*
   =========================================================================================
@@ -240,7 +276,18 @@
   =========================================================================================
   */
 
-    // use remove from cart dataLayer push
+  // Fires when user decreases cart item quantity
+
+  const cartDecreaseQtyTriggers = document.querySelectorAll(myntrSelectors.cartDecreaseQtyTrigger);
+
+  cartDecreaseQtyTriggers.forEach((trigger) => {
+    trigger.addEventListener('click', () => {
+      if(myntrAnalytics.debug) console.log("DataLayer: Cart Item Quantity Decrease Triggered");
+
+      //TODO
+
+    });
+  });
 
 
 
