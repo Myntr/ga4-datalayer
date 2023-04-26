@@ -24,8 +24,10 @@
     REQUIREMENTS
     --------------
     1. GTM scripts added to <head> and <body> tags within theme.liquid to establish data layer and GTM on every page
+    2. Add new product template called 'product.datalayer'
   */
 
+  // TODO: wrap rest of script into singular function and run it
 
   /*
   =========================================================================================
@@ -39,7 +41,7 @@
 
   let myntrSelectors = {
     cartForm: ['form[action="/cart"]'],
-    checkoutCartForm: ['form[action="/checkout"]'],
+    checkoutForm: ['form[action="/checkout"]'],
     cartSubmitTrigger: ['form[action="/cart/add"] [type="submit"],'],
     cartIncreaseQtyTrigger: ['.js-quantity-increase.cart-qty'],
     cartDecreaseQtyTrigger: ['.js-quantity-decrease.cart-qty'],
@@ -47,18 +49,12 @@
     addToCartTrigger: ['.js-ajax-add'],
     promoSubscriptionsSelectors: [],
     promoSuccess: [],
-    ctaSelectors: [],
-    newsletterSelectors: ['input.contact_email'],
-    newsletterSuccess: ['.success_message'],
-    searchPage: ['search'],
-    wishlistSelector: [],
-    removeWishlist: [],
-    wishlistPage: []
+    ctaSelectors: []
   };
 
   let myntrAnalytics = {
     dynamicCart: true,  // if cart is dynamic (meaning no refresh on cart add) set to true
-    debug: false, // if true, console messages will be displayed
+    debug: true, // if true, console messages will be displayed
     cart: null,
     wishlist: null,
     removeCart: null,
@@ -100,6 +96,9 @@
 
   {% if template contains 'product' %}
 
+    // TODO: Determine if this needs to load for QuickView. If so, wrap PDP view in a function.
+    // Then add event listener for QuickView that runs functions, and perform a check for "if dl_template_name.includes('product')"
+
     const dl_pdv_product_name = '{{ product.title }}';
     const dl_pdv_product_id = '{{ product.id }}'
     const dl_pdv_quantity = 1;
@@ -111,6 +110,8 @@
     const dl_pdv_item_category4 = '';  //TODO: use metafields on each product to determine category
     const dl_pdv_item_category5 = '';  //TODO: use metafields on each product to determine category
     const dl_pdv_brand = '{{ product.vendor }}';
+    const dl_pdv_item_star_rating = {{ product.metafields.yotpo.reviews_average }}
+    const dl_pdv_item_number_reviews = {{ product.metafields.yotpo.reviews_count }}
 
     dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
     dataLayer.push({
@@ -124,7 +125,9 @@
             'affiliation': '',                        // TODO: determine info on this
             'quantity': dl_pdv_quantity,
             'price': dl_pdv_price,
-            'item_category': dl_pdv_item_category,
+            'item_regular_price': '[[REGULAR PRICE]]', //doesn’t reflect discount price
+            'item_sale_status': '[[SALE STATUS]]',     //TODO: determien if true/false value or a specific string
+            'item_category': dl_pdv_item_category,   //required, others optional
             'item_category2': dl_pdv_item_category2,
             'item_category3': dl_pdv_item_category3,
             'item_category4': dl_pdv_item_category4,
@@ -133,13 +136,11 @@
             'variant' '[[PRODUCT VARIANT]]',
             'item_list_name': '[[PRODUCT LIST NAME]]',  //TODO: is this needed for Product Detail View?
             'item_list_id': '[[PRODUCT LIST ID]]',      //TODO: is this needed for Product Detail View?
-            'item_sale_status': '[[SALE STATUS]]',      //TODO: is this needed for Product Detail View?
             'item_color': '[[COLOR]]',
-            'item_size': '[[SIZE]]',
-            'item_regular_price': '[[REGULAR PRICE]]', //doesn’t reflect discount price
-            'item_star_rating': '[[STAR RATING]]',
-            'item_number_reviews': '[[NUMBER REVIEWS]]',
             'item_color_position': [[COLOR POSITION]]  //TODO: determine selected swatch index if swatches exist
+            'item_size': '[[SIZE]]',
+            'item_star_rating': dl_pdv_item_star_rating,
+            'item_number_reviews': dl_pdv_item_number_reviews
           }
         ]
       }
@@ -156,27 +157,47 @@
 
   // Fires when product is added to cart  (pdp, plp, etc)
 
+  const add_to_cart_locations = [
+    pdp_add_to_cart: 'Product Page Add To Cart',
+    plp_quick_view: 'Collection Page Quick Add',
+    mini_cart_upsell: 'Mini Cart Upsell',
+    mini_cart_qty_increase: 'Mini Cart Quantity Increase',
+    mini_cart_qty_decrease: 'Mini Cart Quantity Decrease',
+    cart_page_qty_increase: 'Cart Page Quantity Increase',
+    cart_page_qty_decrease: 'Cart Page Quantity Decrease',
+    search_page_add_to_cart: 'Search Page Add To Cart',
+    search_page_quick_view: 'Search Page Quick Add',
+    home_page_add_to_cart: 'Home Page Add To Cart',
+    home_page_quick_view: 'Home Page Quick Add',
+  ]
+
   const addToCartTriggers = document.querySelectorAll(myntrSelectors.addToCartTrigger);
 
   addToCartTriggers.forEach((trigger) => {
     trigger.addEventListener('click', () => {
       if(myntrAnalytics.debug) console.log("DataLayer: Add to Cart Triggered");
 
+      // TODO: using `trigger` element to determine what atc location it is from the `add_to_cart_locations` object
+      // TODO: determine how many products are being added
+      // TODO: build out items array and include the array below in the DL push
+
       dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
 
       dataLayer.push({
         'event': 'add_to_cart',
-        'add_to_cart_location': '[[ADD TO CART LOCATION]]',  // “Product Page Add To Cart”, “Product List Page Quick Add”, “Shopping Bag Add On”, “Shopping Bag Quantity Increase”, “Cart Page Quantity Increase”
+        'add_to_cart_location': '[[ADD TO CART LOCATION]]',
         'ecommerce': {
           'currency': dl_currency_code,
           'items': [ // Array of Item Objects for each product added
             {
-              'item_name': '[[PRODUCT NAME]]',
-              'item_id': '[[PRODUCT ID]]',
-              'affiliation': '[[PRODUCT AFFILIATION]]',
-              'quantity': [[QUANTITY]],
-              'price': [[PRODUCT PRICE]],
-              'item_category': '[[PRODUCT CATEGORY]]',
+              'item_name': '[[PRODUCT NAME]]',  // TODO: get product name from AJAX API
+              'item_id': '[[PRODUCT ID]]',      // TODO: get product name from AJAX API
+              'affiliation': '[[PRODUCT AFFILIATION]]',  // TODO: get product affiliation from AJAX API
+              'quantity': [[QUANTITY]],  // TODO: Get qty from DOM
+              'price': [[PRODUCT PRICE]],  // TODO: Get price from DOM
+              'item_regular_price': [[REGULAR PRICE]], //doesn’t reflect discount price
+              'item_sale_status': '[[SALE STATUS]]', // TODO: Get from AJAX API
+              'item_category': '[[PRODUCT CATEGORY]]', // TODO: Get from AJAX API
               'item_category2': '[[PRODUCT COLLECTION]]',
               'item_category3': '[[PRODUCT CATEGORY 3]]',
               'item_category4': '[[PRODUCT CATEGORY 4]]',
@@ -185,13 +206,11 @@
               'variant' '[[PRODUCT VARIANT]]',
               'item_list_name': '[[PRODUCT LIST NAME]]', // When in list
               'item_list_id': '[[PRODUCT LIST ID]]', // When in list
-              'item_sale_status': [[SALE STATUS]]',
-              'item_color': [[COLOR]]',
-              'item_size': [[SIZE]]',
-              'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
-              'item_star_rating': [[STAR RATING]]',
-              'item_number_reviews': [[NUMBER REVIEWS]]',
-              'item_color_position': [[COLOR POSITION]]'
+              'item_color': '[[COLOR]]',
+              'item_color_position': [[COLOR POSITION]]
+              'item_size': '[[SIZE]]',
+              'item_star_rating': [[STAR RATING]],
+              'item_number_reviews': [[NUMBER REVIEWS]]
             }
           ]
         }
@@ -209,7 +228,7 @@
 
   // Fires when product is removed from cart
 
-  const cartRemoveTriggers = document.querySelectorAll(myntrSelectors.cartRemoveTrigger);
+  {% comment %} const cartRemoveTriggers = document.querySelectorAll(myntrSelectors.cartRemoveTrigger);
 
   cartRemoveTriggers.forEach((trigger) => {
     trigger.addEventListener('click', () => {
@@ -222,32 +241,34 @@
           'currency': dl_currency_code,
           'items': [ // Array of Item Objects for each product removed
             {
-              'item_name': '[[PRODUCT NAME]]',
-              'item_id': '[[PRODUCT ID]]',
-              'affiliation': '[[PRODUCT AFFILIATION]]',
-              'quantity': [[QUANTITY]],
-              'price': [[PRODUCT PRICE]],
-              'item_category': '[[PRODUCT CATEGORY]]',
+              'item_name': '[[PRODUCT NAME]]',  // TODO: get product name from AJAX API
+              'item_id': '[[PRODUCT ID]]',      // TODO: get product name from AJAX API
+              'affiliation': '[[PRODUCT AFFILIATION]]',  // TODO: get product affiliation from AJAX API
+              'quantity': [[QUANTITY]],  // TODO: Get qty from DOM
+              'price': [[PRODUCT PRICE]],  // TODO: Get price from DOM
+              'item_regular_price': [[REGULAR PRICE]], //doesn’t reflect discount price
+              'item_sale_status': '[[SALE STATUS]]', // TODO: Get from AJAX API
+              'item_category': '[[PRODUCT CATEGORY]]', // TODO: Get from AJAX API
               'item_category2': '[[PRODUCT COLLECTION]]',
               'item_category3': '[[PRODUCT CATEGORY 3]]',
               'item_category4': '[[PRODUCT CATEGORY 4]]',
               'item_category5': '[[PRODUCT CATEGORY 5]]',
               'brand': '[[PRODUCT BRAND]]',
               'variant' '[[PRODUCT VARIANT]]',
-              'item_sale_status': [[SALE STATUS]]',
-              'item_color': [[COLOR]]',
-              'item_size': [[SIZE]]',
-              'item_regular_price': [[REGULAR PRICE]]', //doesn’t reflect discount price
-              'item_star_rating': [[STAR RATING]]',
-              'item_number_reviews': [[NUMBER REVIEWS]]',
-              'item_color_position': [[COLOR POSITION]]'
-            },
+              'item_list_name': '[[PRODUCT LIST NAME]]', // When in list
+              'item_list_id': '[[PRODUCT LIST ID]]', // When in list
+              'item_color': '[[COLOR]]',
+              'item_color_position': [[COLOR POSITION]]
+              'item_size': '[[SIZE]]',
+              'item_star_rating': [[STAR RATING]],
+              'item_number_reviews': [[NUMBER REVIEWS]]
+            }
           ]
         }
       });
 
     });
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -258,7 +279,7 @@
 
   // Fires when user increases cart item quantity
 
-  const cartIncreaseQtyTriggers = document.querySelectorAll(myntrSelectors.cartIncreaseQtyTrigger);
+  {% comment %} const cartIncreaseQtyTriggers = document.querySelectorAll(myntrSelectors.cartIncreaseQtyTrigger);
 
   cartIncreaseQtyTriggers.forEach((trigger) => {
     trigger.addEventListener('click', () => {
@@ -267,7 +288,7 @@
       //TODO
 
     });
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -278,7 +299,7 @@
 
   // Fires when user decreases cart item quantity
 
-  const cartDecreaseQtyTriggers = document.querySelectorAll(myntrSelectors.cartDecreaseQtyTrigger);
+  {% comment %} const cartDecreaseQtyTriggers = document.querySelectorAll(myntrSelectors.cartDecreaseQtyTrigger);
 
   cartDecreaseQtyTriggers.forEach((trigger) => {
     trigger.addEventListener('click', () => {
@@ -287,7 +308,7 @@
       //TODO
 
     });
-  });
+  }); {% endcomment %}
 
 
 
@@ -299,7 +320,7 @@
 
   // Fire this on a product click, such as on product list pages, product carousels, product suggestions, etc...
 
-  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  {% comment %} dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
   dataLayer.push({
     'event': 'select_item',
     'filters_applied' : '[[FILTER TYPE]]:[[FILTER VALUE]]', // For use on PLP. Use a colon (:) to separate the filter type/value text and a pipe (|) to delimit multiple filter combinations applied.  Note there is a 100 character limit so prioritize filter values accordingly
@@ -331,7 +352,7 @@
         },
       ]
     }
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -344,7 +365,7 @@
   // It should include all products that are in viewport. Products should only be sent once per view per page when viewed in a list.
   // includes homepage product sliders, PLP, PDP suggest products, minicart upsell sliders
 
-  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  {% comment %} dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
   dataLayer.push({
     'event': 'view_item_list',
     'ecommerce': {
@@ -375,7 +396,7 @@
         },
       ]
     }
-  });
+  }); {% endcomment %}
 
 
 
@@ -389,7 +410,7 @@
   // It should include all promotions that are in viewport. Promotions should only be sent once per view per page.
 
 
-  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  {% comment %} dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
   dataLayer.push({
     'event': 'view_promotion',
     'ecommerce': {
@@ -404,7 +425,7 @@
         },
       ]
     }
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -415,7 +436,7 @@
 
   //Fire on click of a promotion
 
-  dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
+  {% comment %} dataLayer.push({ ecommerce: null }); // Clear previous ecommerce object
   dataLayer.push({
     'event': 'select_promotion',
     'ecommerce': {
@@ -430,7 +451,7 @@
         },
       ]
     }
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -441,9 +462,9 @@
 
   // Fires when user subscribes to email newsletter
 
-  dataLayer.push({
+  {% comment %} dataLayer.push({
     'event': 'email_optin'
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -454,9 +475,9 @@
 
   // Fires when user subscribes to email newsletter
 
-  dataLayer.push({
+  {% comment %} dataLayer.push({
     'event': 'account_register'
-  });
+  }); {% endcomment %}
 
 
   /*
@@ -467,9 +488,9 @@
 
   // Fires when user subscribes to email newsletter
 
-  dataLayer.push({
+  {% comment %} dataLayer.push({
     'event': 'account_login'
-  });
+  }); {% endcomment %}
 
 
 
@@ -481,12 +502,13 @@
 
   // Fires when a navigation element is clicked
 
-  dataLayer.push({
+
+  {% comment %} dataLayer.push({
     'event': 'navigation_click',
     'click_location' : '[[CLICK LOCATION]]'
     'link_text' : '[[LINK TEXT]]',
     'destination_url' : '[[DESTINATION URL]]'
-  });
+  }); {% endcomment %}
 
 
 
