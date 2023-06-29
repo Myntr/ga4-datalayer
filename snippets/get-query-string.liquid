@@ -1,0 +1,8 @@
+{%- capture contentForQuerystring -%}{{ content_for_header }}{%- endcapture -%}
+{%- liquid
+  assign pageUrl = contentForQuerystring | split: '"pageurl":"' | last | split: '"' | first | split: '.myshopify.com' | last | replace: '\/','/' | replace: '%20',' ' | replace: '\u0026','&'
+  if pageUrl contains '?'
+    assign pageQuerystring = pageUrl | split: '?' | last
+    echo pageQuerystring
+  endif
+-%}

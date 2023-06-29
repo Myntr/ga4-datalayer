@@ -1,0 +1,1154 @@
+{% liquid
+  comment
+
+    ABOUT
+    --------
+    Myntr DataLayer
+    v1.0
+
+    DESCRIPTION
+    -------------
+    This file handles implementation of GA4 in Shopify themes.
+    It's purpose is to track user interactions and push these to the data layer.
+    This file includes:
+    - Tracking the cart and checkout steps
+    - Tracking adds to and removes from the cart
+    - Tracking product detail views
+    - Tracking product clicks
+    - Tracking product views (impressions)
+    - Tracking promotion views (impressions)
+    - Tracking promotion clicks
+
+    CUSTOM CLIENT EVENTS
+    ---------------------
+    Themes may require specific events depending on installed 3rd parties/apps.
+    These specific events are marked by the following comment:
+    // #CUSTOM CLIENT EVENT
+    You can search for this comment line within this file in order to find & modify custom events.
+
+    REQUIREMENTS
+    --------------
+    1. Insert code into <head> within theme.liquid & checkout.liquid
+    <!-- Google Tag Manager --><script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','{{settings.gtm_id}}');</script><!-- End Google Tag Manager -->
+
+    2. Insert code into <body> within theme.liquid & checkout.liquid
+    <!-- Google Tag Manager (noscript) --><noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{settings.gtm_id}}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><!-- End Google Tag Manager (noscript) -->
+
+    3. Add schema to 'settings_schema.json' and then input the client's GTM ID
+        {
+          "name": "GTM Data Layer",
+          "settings": [
+            {
+              "type": "text",
+              "id": "gtm_id",
+              "label": "GTM ID",
+              "info": "Insert Google Tag Manager ID"
+            },
+            {
+              "type": "checkbox",
+              "id": "gtm_debug",
+              "label": "Enable debugging",
+              "info": "If checked, events will be pushed to the 'myntrLayer' object and development logs will show in the browser console.",
+              "default": false
+            }
+          ]
+        }
+
+    4. Add new snippet: 'datalayer.liquid'
+    5. Add new snippet: 'product-datalayer.liquid'
+    6. Add new snippet: 'datalayer-promo-attrs.liquid'
+    7. Add new snippet: 'get-query-string.liquid'
+    8. Add new product template: 'product.datalayer.liquid'
+    9. Add new cart template: 'cart.datalayer.liquid'
+    10. Render 'datalayer' snippet near end of </body> tag on theme.liquid and checkout.liquid
+
+  endcomment
+%}
+
+<script>
+  (()=>{
+
+    /*
+      =========================================================================================
+        GLOBAL VARIABLES AND SELECTORS
+      =========================================================================================
+    */
+
+    window.dataLayer = window.dataLayer || []; // init data layer if it does not already exist
+
+    const myntrAnalytics = {
+      dynamicCart: true,  // if cart is dynamic (meaning no refresh on cart add) set to true
+      debug: {{ settings.gtm_debug }}, // if true, console messages will be displayed,
+      sessionStorageProductClick: 'datalayer:product:click'
+    };
+
+    if(myntrAnalytics.debug){
+      console.log(`%c snippets/datalayer.liquid loaded`, "color:green;font-size:16px;");
+      window.myntrLayer = window.myntrLayer || [];
+    }
+
+    let myntrSelectors = {
+      dynamicCartForm: ['[data-datalayer-trigger="view_dynamic_cart"]'],
+      promotion: ['[data-datalayer-trigger="view_promotion"]'],
+      itemList: ['[data-datalayer-trigger="view_item_list"]'],
+      accountRegister: ['[data-datalayer-trigger="account_register"]'],
+      accountLogin: ['[data-datalayer-trigger="account_login"]'],
+      navigationClickTrigger: ['#main-nav a','.mobile-menu a', '[data-datalayer-trigger="navigation_click"]'],
+      navigationClickTriggerLocation: ['[data-datalayer-navigation-click-location]'],
+      emailOptIn: ['[data-datalayer-trigger="email_optin"]']
+    };
+
+    // Add to Cart Locations
+    const add_to_cart_locations = {
+      pdp_add_to_cart: 'Product Page Add To Cart',
+      plp_quick_view: 'Collection Page Quick Add',
+      mini_cart_upsell: 'Mini Cart Upsell',
+      mini_cart_qty_increase: 'Mini Cart Quantity Increase',
+      mini_cart_remove: 'Mini Cart Remove Item',
+      mini_cart_qty_decrease: 'Mini Cart Quantity Decrease',
+      cart_page_qty_increase: 'Cart Page Quantity Increase',
+      cart_page_qty_decrease: 'Cart Page Quantity Decrease',
+      search_page_add_to_cart: 'Search Page Add To Cart',
+      search_page_quick_view: 'Search Page Quick Add',
+      home_page_add_to_cart: 'Home Page Add To Cart',
+      home_page_quick_view: 'Home Page Quick Add',
+    }
+
+    // Currency Code
+    const dl_currency_code = "{{ cart.currency.iso_code }}";
+
+    // Format Money
+    function formatPrice(price) {
+      return parseFloat(Shopify.formatMoney(price, {% raw %}'{{amount}}'{% endraw %}).replaceAll(',',''))
+    }
+
+    // Push Data Layer Event
+    function pushEvent(event){
+      if(myntrAnalytics.debug) {
+        window.myntrLayer.push(event)
+      } else {
+        window.dataLayer.push(event)
+      }
+    }
+
+
+    /*
+      =========================================================================================
+        Event Listeners and Observers
+      =========================================================================================
+    */
+
+    function initEventListeners(){
+      if(myntrAnalytics.debug) console.log(`%c initEventListeners() called.`, "color:green;font-size:16px;");
+
+      // Initialize pdp swatch change (bundle products) event listener
+      {% comment %} {% if template contains 'product' %}
+        const pdpBundleSwatches = document.querySelectorAll('.js-swatch-bundle--color');
+        pdpBundleSwatches.forEach((swatch) => {
+          swatch.addEventListener('click', (e) => {
+            fetch(`/products/${e.target.dataset.handle}?view=datalayer`, { method: 'GET' })
+            .then(response => response.json())
+            .then((data) => {
+              const item = data;
+              pushViewItem(item);
+            })
+            .catch((error) => {
+              console.error(error);
+            });
+          },false);
+        });
+      {% endif %} {% endcomment %}
+
+      // Initialize add_to_cart event listeners
+      document.addEventListener('product:added', (data) => {
+        pushAddToCart(data);
+      },false);
+
+      // Initialize cart item updated event listeners
+      document.addEventListener('cart:updated', (data) => {
+        pushCartItemQuantityChange(data);
+      },false);
+
+      // Initialize product click event listeners
+      document.addEventListener('click', function(event) {
+        const trigger = event.target;
+        let link = null;
+
+        if (trigger.matches('a[href]')){
+          link = trigger;
+        }else{
+          link = trigger.closest('a[href]')
+        }
+
+        if(!link || !link.href.includes('products/')) return;
+
+        sessionStorage.setItem(myntrAnalytics.sessionStorageProductClick,link.href);
+
+      }, false);
+
+      // Initialize select_promotion event listeners
+      const selectPromotionTriggers = document.querySelectorAll(myntrSelectors.promotion);
+      selectPromotionTriggers.forEach((trigger) => {
+        trigger.addEventListener('click', (event) => pushSelectPromotion(trigger,event));
+      });
+
+      // Initialize navigation_click event listeners
+      const navigationClickTriggers = document.querySelectorAll(myntrSelectors.navigationClickTrigger);
+      navigationClickTriggers.forEach((trigger) => {
+        trigger.addEventListener('click', () => pushNavigationClick(trigger));
+      });
+
+      // Initialize Klaviyo email optin
+      window.addEventListener("klaviyoForms", (data) => {
+        if(myntrAnalytics.debug) console.log(`%c klaviyoEmailOptIn`, "color:green;font-size:16px;");
+
+        if(data.detail.type != 'submit') return;
+        if(!data.detail.metaData) return;
+
+        pushEvent({
+          'event': 'email_optin'
+        });
+
+      },false);
+
+      // Initialize footer email optin
+      document.querySelectorAll(myntrSelectors.emailOptIn).forEach(form => {
+        form.addEventListener('submit', function (e) {
+          if(myntrAnalytics.debug) console.log(`%c email_optin event`, "color:green;font-size:16px;");
+          pushEvent({
+            'event': 'email_optin'
+          });
+        });
+      });
+
+
+    }// END: initEventListeners()
+
+    function initObservers(){
+      if(myntrAnalytics.debug) console.log(`%c initObservers() called.`, "color:green;font-size:16px;");
+
+      // Initialize view_promotion observer
+      initViewPromotionObserver();
+
+      // Initialize view_item_list observer -- (product list viewed)
+      initViewItemListObserver();
+
+      // Initialize view_dynamic_cart observer -- (minicart view)
+      initViewDynamicCartObserver();
+    }// END: initObservers()
+
+    /**
+    * Observe Promotions
+    */
+    function initViewPromotionObserver() {
+      const viewPromotionTargets = document.querySelectorAll(myntrSelectors.promotion);
+      const options = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.9
+      };
+
+      const viewPromotionObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            pushViewPromotion(entry.target);
+            observer.unobserve(entry.target); // we no longer want to trigger the view event when we come across this element
+          }
+        });
+      }, options);
+
+      // attach the observer to all targets
+      viewPromotionTargets.forEach(target => {
+        viewPromotionObserver.observe(target);
+      });
+    }
+
+    /**
+    * Observe when an Item List is viewed
+    */
+    function initViewItemListObserver() {
+      if(myntrAnalytics.debug) console.log(`%c initViewItemListObserver() `, "color:green;font-size:16px;");
+
+      const itemListOptions = { root: null, rootMargin: '0px', threshold: 0.10 }; // we only need to see a little bit of the list container to trigger the intersection
+      const itemRowOptions = { root: null, rootMargin: '0px', threshold: 0.90 }; // we only want to trigger the view when we have the majority of the row in view.
+
+      // define an observer for the "view_item_list" rows.
+      const observeListRows = (items, rowItemCount, list) => {
+        for(let i = 0; i < items.length; i += rowItemCount) {
+          const rowItems = items.slice(i, i + rowItemCount);
+          const rowObserver = new IntersectionObserver((rowEntries, rowObserver) => {
+            rowEntries.forEach(rowEntry => {
+              if (rowEntry.isIntersecting) {
+                if(myntrAnalytics.debug) console.log("Intersecting a product list row.");
+                pushViewItemList(rowItems,list);
+                rowObserver.unobserve(rowEntry.target);
+              }
+            });
+          }, itemRowOptions);
+          rowObserver.observe(rowItems[0]);
+        }
+      };
+
+      // define the observer for the "view_item_list" elements.
+      const observeItemList = (target) => {
+        const viewItemListObserver = new IntersectionObserver((entries, observer) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              if(myntrAnalytics.debug) console.log("Intersecting a product list.");
+              const itemSelector = entry.target.dataset.datalayerItemListElement;
+              const items = Array.from(entry.target.querySelectorAll(itemSelector)).filter(item => window.getComputedStyle(item).display !== 'none');
+
+              // Calculate items per row
+              let rowItemCount = 4;
+              {% if template contains 'collection' or template contains 'search' %}
+                if(window.innerWidth < 980){
+                  rowItemCount = 2; //mobile
+                }
+              {% endif %}
+              {% if template contains 'index' or template contains 'product' %}
+                if(window.innerWidth < 740){
+                  rowItemCount = 2; //mobile
+                }
+              {% endif %}
+
+              //use data attribute for desktop or mobile row count if present.
+              if(window.innerWidth < 768){
+                if(entry.target.dataset.datalayerItemListRowCountMobile){
+                  rowItemCount = parseInt(entry.target.dataset.datalayerItemListRowCountMobile);
+                }
+              }else{
+                if(entry.target.dataset.datalayerItemListRowCountDesktop){
+                  rowItemCount = parseInt(entry.target.dataset.datalayerItemListRowCountDesktop);
+                }
+              }
+
+              //Get list name and id from target dataset
+              let list = null;
+              if(entry.target.dataset.datalayerItemListName && entry.target.dataset.datalayerItemListId){
+                list = {
+                  "name": entry.target.dataset.datalayerItemListName,
+                  "id": entry.target.dataset.datalayerItemListId
+                }
+              }
+
+              observeListRows(items, rowItemCount, list);
+              observer.unobserve(entry.target); // we no longer want to trigger the intersection observer
+              // As nodes may get added to the DOM, we want to build a list. When the list reaches the row count, push those nodes and then reset the list.
+              let newRowItems = [];
+              // there may be cases where an odd number of nodes are added that do not reach the rowItemCount, so after awhile let's check if we have any nodes left, and push that "final row"
+              let debounceTimer = null;
+              const debounceDelay = 3000;
+              // Create a mutation observer for the itemList to look for new nodes added.
+              const newRowsObserver = new MutationObserver((mutationsList, observer) => {
+                mutationsList.forEach(({type, addedNodes}) => {
+                  if (type === 'childList') {
+                    addedNodes.forEach(node => {
+                      // we only care for nodes that match the itemSelector, sometimes collection promos are injected and we won't push those.
+                      if (node.nodeType === Node.ELEMENT_NODE && node.matches(itemSelector)) {
+                        // Add the new node to the newRowItems
+                        newRowItems.push(node);
+                        // If newRowItems length hits the quota for rowItemCount
+                        if (newRowItems.length === rowItemCount) {
+                          // Observe the row and push it.
+                          observeListRows(newRowItems, rowItemCount, list);
+                          // Clear newRowItems to reset for the next batch.
+                          newRowItems = [];
+                        }
+                      }
+                    });
+                    // Check if we still have added nodes here, push up whatever we have.
+                    // ideally new nodes are injected a way where the above quota based code should run and push well before we hit this.
+                    // this leaves this chunk to only deal with stragglers.
+                    if (addedNodes.length > 0) {
+                      clearTimeout(debounceTimer);
+                      debounceTimer = setTimeout(() => {
+                        if (newRowItems.length > 0) {
+                          observeListRows(newRowItems, newRowItems.length);
+                          newRowItems = [];
+                        }
+                      }, debounceDelay);
+                    }
+                  }
+                });
+              });
+              newRowsObserver.observe(entry.target, { childList: true, subtree: true }); // observe the list for new nodes.
+            }
+          });
+        }, itemListOptions);
+        viewItemListObserver.observe(target);
+      }
+
+      // search the current document for "view_item_list" elements and observe them.
+      Array.from(document.querySelectorAll(myntrSelectors.itemList)).forEach(observeItemList);
+
+      // we also need to observe parts of the document for new "view_item_list" elements that may be dynamically injected.
+
+      // selector array of site zones we want to observe, this can change per-client.
+      const listZones = ['main'];
+
+      // create the observer function for these injected elements.
+      const newItemListObserver = new MutationObserver((mutationsList, observer) => {
+        mutationsList.forEach(({type, addedNodes}) => {
+          if (type === 'childList') {
+            addedNodes.forEach(node => {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.matches(myntrSelectors.itemList)) {
+                  observeItemList(node);
+                }
+                // #CUSTOM CLIENT EVENT - REBUY SLIDERS
+                // Detect Rebuy 3rd Party Elements
+                else if(node.matches('div[data-rebuy-id]')) {
+                  observeRebuyList(node);
+                }
+                // #END CUSTOM CLIENT EVENT - REBUY SLIDERS
+                else {
+                  Array.from(node.querySelectorAll(myntrSelectors.itemList)).forEach(observeItemList);
+                }
+              }
+            });
+          }
+        });
+      });
+
+      // Loop through the selector array, if the selector is found to exist on the page, observe it for newly injected lists.
+      listZones.forEach(listZone => {
+        const zone = document.querySelector(listZone);
+        if (zone) {
+          newItemListObserver.observe(zone, { childList: true, subtree: true });
+        }
+      });
+
+      // #CUSTOM CLIENT EVENT - REBUY SLIDERS
+      // Watch and Push Item Lists for Rebuy 3rd Party Elements
+      const observeRebuyList = (target) => {
+        console.log(target);
+        const viewItemListObserver = new IntersectionObserver((entries, observer) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              if(myntrAnalytics.debug) console.log("Intersecting a REBUY product list.");
+              const itemSelector = '.rebuy-product-block';
+              const items = Array.from(entry.target.querySelectorAll(itemSelector)).filter(item => window.getComputedStyle(item).display !== 'none');
+              // Calculate items per row
+              let rowItemCount = 4;
+              if(entry.target.parentNode.matches(['.cart__details','.js-cart-aside']) || window.innerWidth < 1025){
+                rowItemCount = 2; //mobile
+              }
+              // Watch for items and submit list views for Rebuy items
+              for(let i = 0; i < items.length; i += rowItemCount) {
+                const rowItems = items.slice(i, i + rowItemCount);
+                const rowObserver = new IntersectionObserver((rowEntries, rowObserver) => {
+                  rowEntries.forEach(rowEntry => {
+                    if (rowEntry.isIntersecting) {
+                      if(myntrAnalytics.debug) console.log("Intersecting a REBUY product list item row.");
+                      //create datalayer items array
+                      let handles = [];
+                      for (const element of rowItems) {
+                       let href = element.querySelector('a').href;
+                       const handle = href.substring(href.indexOf('products/')+ 9,href.indexOf('?'));
+                       handles.push(handle);
+                      }
+                      rebuyListItemPush(handles);
+                      rowObserver.unobserve(rowEntry.target);
+                    }
+                  });
+                }, itemRowOptions);
+                rowObserver.observe(rowItems[0]);
+              }
+
+              //observeListRows(items, rowItemCount);
+              observer.unobserve(entry.target);
+            }
+          });
+        }, itemListOptions);
+        viewItemListObserver.observe(target);
+      }
+      async function rebuyListItemPush(handles) {
+        if(myntrAnalytics.debug) console.log(`%c pushing Rebuy Item List View`, "color:green;font-size:16px;");
+        if(handles.length == 0) return;
+        let items = [];
+        for(let handle of handles){
+          //fetch datalayer details for each item
+          const item = await fetch(`/products/${handle}?view=datalayer`, { method: 'GET' })
+                        .then(response => response.json())
+                        .then((data) => {
+                          return data;
+                        })
+                        .catch((error) => {
+                          console.error(error);
+                        });
+          //Push item to array
+          items.push(item);
+        }
+        pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+        pushEvent({
+          'event': 'view_item_list',
+          'ecommerce': {
+            'currency': dl_currency_code,
+            'items': items
+          }
+        });
+        //loop over hadnles, fetch each, push to array, then run push() func
+      }
+      // #END CUSTOM CLIENT EVENT - REBUY SLIDERS
+
+    }// END initViewItemListObserver
+
+    /**
+    * Observe when minicart is viewed
+    */
+    function initViewDynamicCartObserver() {
+
+      const onCartDrawerVisible = (entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            pushViewDynamicCart();
+          }
+        });
+      };
+
+      const options = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.5
+      };
+
+      const observer = new IntersectionObserver(onCartDrawerVisible, options);
+      const cartDrawer = document.querySelector(myntrSelectors.dynamicCartForm);
+
+      if (cartDrawer) {
+        observer.observe(cartDrawer);
+      }
+    }
+
+
+    /*
+      =========================================================================================
+        Push Events
+      =========================================================================================
+    */
+
+    /**
+    * Page View Event
+    */
+    function pushPageView(){
+
+      if(myntrAnalytics.debug) console.log(`%c pushPageView() page_view event.`, "color:green;font-size:16px;");
+
+      {% liquid
+        assign dl_page_category = ''
+        assign dl_page_subcategory = ''
+        assign dl_page_collection = ''
+        assign template_object = false
+        case template.name
+          when 'article'
+            assign template_object = article
+          when 'blog'
+            assign template_object = blog
+          when 'collection'
+            assign template_object = collection
+          when 'page'
+            assign template_object = page
+          when 'product'
+            assign template_object = product
+        endcase
+        if template_object
+          assign dl_page_category = template_object.metafields.datalayer.page_category.value
+          assign dl_page_subcategory = template_object.metafields.datalayer.page_subcategory.value
+          assign dl_page_collection = template_object.metafields.datalayer.page_collection.value
+        endif
+      %}
+
+      //Page data
+      let dl_page_type = '{{- request.page_type -}}'; // home page, product detail page, terms & conditions, cart page, etc.
+      const dl_customer_id = '{{- customer.id -}}';
+      const dl_login_status = {% if customer %}true{% else %}false{% endif %};
+      const dl_membership_status = '';
+      const dl_page_category = '{{- dl_page_category -}}';
+      const dl_page_subcategory = '{{- dl_page_subcategory -}}';
+      const dl_page_collection = '{{- dl_page_collection -}}';
+
+      //Checkout Page View
+      {% if checkout %}
+        dl_page_type = 'checkout';
+      {% endif %}
+
+      // Push Data Layer Event
+      pushEvent({
+        'event': 'page_view',
+        'page_type': dl_page_type,
+        'page_category': dl_page_category,
+        'page_subcategory': dl_page_subcategory,
+        'page_collection': dl_page_collection,
+        'user_id': dl_customer_id,
+        'login_status': dl_login_status,
+        'membership_status': dl_membership_status
+      });
+    }
+
+    {% if template contains 'product' %}
+
+    /**
+    * Product Detail View Event
+    */
+    function pushViewItem(_item = null){
+
+      if(myntrAnalytics.debug) console.log(`%c pushViewItem() view_item event.`, "color:green;font-size:16px;");
+
+      let item = {% render 'product-datalayer', _product: product %};
+      if(_item != null) item = _item;
+
+      //Selected Swatch Position
+      let pdpColorSwatches = document.querySelectorAll('.swatch-element--color input');
+      pdpColorSwatches.forEach((swatch) => {
+        if (swatch.checked) {
+          item.item_color_position = swatch.dataset.position;
+        }
+      });
+
+      // Push Product Click Event
+      pushProductClick(item);
+
+      // Push View Item Event
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'view_item',
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': [item]
+        }
+      });
+
+    }// END: pushViewItem()
+
+
+    /**
+    * Product Click Event
+    */
+    function pushProductClick(item) {
+
+      //must have a link previously clicked within session storage
+      if(!sessionStorage.getItem(myntrAnalytics.sessionStorageProductClick)) return;
+
+      if(myntrAnalytics.debug) console.log(`%c pushProductClick() called`, "color:green;font-size:16px;");
+
+      //get link from storage
+      const href = sessionStorage.getItem(myntrAnalytics.sessionStorageProductClick);
+      const href_handle = href.split('products/').pop().split('?')[0];
+
+      //remove link from storage
+      sessionStorage.removeItem(myntrAnalytics.sessionStorageProductClick);
+
+      if(href_handle != '{{ product.handle }}') return;
+
+      // Push Data Layer Event
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'select_item',
+        'filters_applied': '', //TODO: get filters applied if coming from PLP
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': [item]
+        }
+      });
+    }
+
+    {% endif %}
+
+    /**
+    * Product Add to Cart Event
+    */
+    async function pushAddToCart(data){
+      if(myntrAnalytics.debug) console.log(`%c pushAddToCart() called.`, "color:green;font-size:16px;");
+      if(!data) return;
+
+      //Add to Cart Location
+      let dl_add_to_cart_location = '';
+      {% if template contains 'product' %}
+        dl_add_to_cart_location = add_to_cart_locations.pdp_add_to_cart;
+      {% elsif template contains 'collection' %}
+        dl_add_to_cart_location = add_to_cart_locations.plp_quick_view;
+      {% else %}
+        dl_add_to_cart_location = '{{ template.name | capitalize }} Add To Cart'
+      {% endif %}
+
+      // Get product data
+      let items = [];
+
+      //iterate over cart response items
+      for (let [i, cart_item] of data.detail.response.items.entries()) {
+        const item_quantity_added = parseInt(data.detail.items_added[i].quantity);
+        if(cart_item.quantity == 0) continue;
+
+        //fetch datalayer details for each item
+        const item = await fetch(`/products/${cart_item.handle}?variant=${cart_item.variant_id}&view=datalayer`, { method: 'GET' })
+                  .then(response => response.json())
+                  .then((data) => {
+                    return data;
+                  })
+                  .catch((error) => {
+                    console.error(error);
+                  });
+
+
+        //Selected Swatch Position
+        let pdpColorSwatches = document.querySelectorAll('.swatch-element--color input');
+        pdpColorSwatches.forEach((swatch) => {
+          if (swatch.checked && !swatch.closest('.hidden-swatches')) {
+            item.item_color_position = swatch.dataset.position;
+          }
+        });
+
+        //Update quantity
+        item.quantity = item_quantity_added;
+
+        //Push item to array
+        items.push(item);
+      }
+
+      if(items.length == 0) return;
+
+      // Push Data Layer Event
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'add_to_cart',
+        'add_to_cart_location': dl_add_to_cart_location,
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': items
+        }
+      });
+
+    }// END: pushAddToCart()
+
+
+    /**
+    * Product Update/Remove Event
+    */
+    async function pushCartItemQuantityChange(data){
+      if(myntrAnalytics.debug) console.log(`%c pushCartItemQuantityChange() called.`, "color:green;font-size:16px;");
+      if(!data) return;
+
+      const event_type = data.detail.event.event_type;
+      const items_changed = data.detail.items_changed;
+      const event_quantity = data.detail.event.item_quantity;
+      let dl_event_name = '';
+      let dl_event_location = '';
+
+      if(event_type === 'mini-cart-item-remove'){
+        dl_event_name = 'remove_from_cart';
+      }
+      else if(event_type === 'mini-cart-item-quantity-remove'){
+        dl_event_name = 'remove_from_cart';
+      }
+      else if(event_type === 'mini-cart-item-quantity-add'){
+        dl_event_name = 'add_to_cart';
+        dl_event_location = add_to_cart_locations.mini_cart_qty_increase;
+      }
+
+      // Get product data
+      let items = [];
+
+      for (let [i, cart_item] of data.detail.response.items.entries()) {
+
+        //iterate over items_changed to find matching items, and get quantity
+        let itemMatches = false;
+        for (const item_changed of data.detail.items_changed) {
+
+          let cartItemID = cart_item.key;
+
+          //using variant id for check?
+          if(data.detail.event.using_variant_id){
+            cartItemID = cart_item.variant_id
+          }
+
+          if(cartItemID == item_changed.key){
+            itemMatches = true;
+            break;
+          }
+        }
+        if(!itemMatches) continue;
+
+
+        let item_quantity_changed = null;
+        if(event_type == 'mini-cart-item-remove'){
+          item_quantity_changed = cart_item.quantity; //if removing item, get quantity of cart item prior to removal
+        }else{
+          item_quantity_changed = event_quantity //if adding or removing single item, quantity will be 1 from event object
+        }
+
+        //fetch datalayer details for each item
+        const item = await fetch(`/products/${cart_item.handle}?variant=${cart_item.variant_id}&view=datalayer`, { method: 'GET' })
+                  .then(response => response.json())
+                  .then((data) => {
+                    return data;
+                  })
+                  .catch((error) => {
+                    console.error(error);
+                  });
+
+        //Update quantity
+        item.quantity = item_quantity_changed;
+
+        //Push item to array
+        items.push(item);
+
+      }
+
+      if(items.length == 0) return;
+
+      //create event object
+      let eventObj = {
+        'event': dl_event_name,
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': items
+        }
+      };
+
+      //if adding to cart, set event location
+      if(dl_event_name == 'add_to_cart'){
+        eventObj['add_to_cart_location'] = dl_event_location;
+      }
+
+      // Push Data Layer Event
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent(eventObj);
+
+    }// END: pushCartItemQuantityChange()
+
+
+    /**
+    * Minicart View Event
+    */
+    async function pushViewDynamicCart(){
+      if(myntrAnalytics.debug) console.log(`%c pushViewDynamicCart() called.`, "color:green;font-size:16px;");
+
+      const cart = await fetchCart();
+
+      if(cart.items.length == 0 ) return;
+
+
+      // Push Data Layer Event
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+
+      pushEvent({
+        'event': 'view_cart',
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'value': cart.total_price,
+          'checkout_step': '1',
+          //'checkout_option': ''
+          'gift': false,                  // Is the order a gift?  true or false value only
+          'items': cart.items
+        }
+      });
+    }
+
+    /**
+    * Cart Page View Event
+    */
+    async function pushViewStaticCart(){
+      if(myntrAnalytics.debug) console.log(`%c pushViewStaticCart() called.`, "color:green;font-size:16px;");
+
+      const cart = await fetchCart();
+
+      if(cart.items.length == 0 ) return;
+
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'view_cart',
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'value': cart.total_price,
+          'checkout_step': '1',
+          //'checkout_option': '',
+          'gift': false,                  // Is the order a gift?  true or false value only
+          'items': cart.items
+        }
+      });
+
+    }
+
+    /**
+    * Fetch cart template with item data layer values
+    */
+    function fetchCart() {
+      return fetch('/cart?view=datalayer', { method: 'GET' })
+      .then(response => response.json())
+      .then((data) => {
+        return data;
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+    }
+
+    /**
+    * Item List View Event
+    */
+    async function pushViewItemList(nodeArray, list){
+      if(myntrAnalytics.debug) console.log(`%c pushViewItemList() called.`, "color:green;font-size:16px;");
+      if(!nodeArray) return;
+
+      //create datalayer items array
+      let items = [];
+      for (const element of nodeArray) {
+        let item = null;
+        if(element.querySelector('.product-datalayer-json')){
+          item = JSON.parse(element.querySelector('.product-datalayer-json').textContent);
+        }
+        else if(element.dataset.handle){
+          item = await fetch(`/products/${element.dataset.handle}?view=datalayer`, { method: 'GET' })
+                  .then(response => response.json())
+                  .then((data) => {
+                    return data;
+                  })
+                  .catch((error) => {
+                    console.error(error);
+                  });
+        }
+        //set list item name and id if explicity passed
+        if(list){
+          item.item_list_name = list.name;
+          item.item_list_id = list.id;
+        }
+        items.push(item);
+      }
+      if(items.length == 0 || items[0] == null) return;
+
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'view_item_list',
+        'ecommerce': {
+          'currency': dl_currency_code,
+          'items': items
+        }
+      });
+    }
+
+    /**
+    * Promotion View Event
+    */
+    function pushViewPromotion(trigger){
+      if(myntrAnalytics.debug) console.log(`%c pushViewPromotion() called.`, "color:green;font-size:16px;");
+      if(!trigger) return;
+
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'view_promotion',
+        'ecommerce': {
+          'items': [
+            {
+              'promotion_id': (!!trigger.dataset.gtmPromotionId) ? trigger.dataset.gtmPromotionId : "",
+              'promotion_name': (!!trigger.dataset.gtmPromotionName) ? trigger.dataset.gtmPromotionName : "",
+              'creative_name': (!!trigger.dataset.gtmCreativeName) ? trigger.dataset.gtmCreativeName : "",
+              'creative_slot': (!!trigger.dataset.gtmCreativeSlot) ? trigger.dataset.gtmCreativeSlot : "",
+              'location_id': (!!trigger.dataset.gtmLocationId) ? trigger.dataset.gtmLocationId : "",
+              // TODO: Include 'items' key/value pair here for any items related to promotion
+            }
+          ]
+        }
+      });
+    }
+
+    /**
+    * Promotion Select Event
+    */
+    function pushSelectPromotion(trigger,event){
+      if(myntrAnalytics.debug) console.log(`%c pushSelectPromotion() called.`, "color:green;font-size:16px;");
+      if(!trigger) return;
+      if(!trigger.contains(event.target)) return; //ensure click event was within promotion
+
+      pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+      pushEvent({
+        'event': 'select_promotion',
+        'ecommerce': {
+          'items': [
+            {
+              'promotion_id': (!!trigger.dataset.gtmPromotionId) ? trigger.dataset.gtmPromotionId : "",
+              'promotion_name': (!!trigger.dataset.gtmPromotionName) ? trigger.dataset.gtmPromotionName : "",
+              'creative_name': (!!trigger.dataset.gtmCreativeName) ? trigger.dataset.gtmCreativeName : "",
+              'creative_slot': (!!trigger.dataset.gtmCreativeSlot) ? trigger.dataset.gtmCreativeSlot : "",
+              'location_id': (!!trigger.dataset.gtmLocationId) ? trigger.dataset.gtmLocationId : "",
+              // TODO: Include 'items' key/value pair here for any items related to promotion
+            }
+          ]
+        }
+      });
+    }
+
+    /**
+    * Navigation Click Event
+    */
+    function pushNavigationClick(trigger){
+      if(myntrAnalytics.debug) console.log(`%c pushNavigationClick() called.`, "color:green;font-size:16px;");
+      if(!trigger) return;
+
+      //get click location based on data attribute of parent navigation element
+      let clickLocation = '';
+      let clickLocationElement = trigger.closest(myntrSelectors.navigationClickTriggerLocation);
+      if(clickLocationElement){
+        clickLocation = clickLocationElement.dataset.datalayerNavigationClickLocation
+      }
+
+      pushEvent({
+        'event': 'navigation_click',
+        'click_location': clickLocation,
+        'link_text': trigger.textContent.replace(/(\r\n|\n|\r)/gm, "").replace(/\s+/g, ' ').trim(),
+        'destination_url': trigger.href
+      });
+
+    }
+
+    /**
+    * Account Register Event
+    */
+    function pushAccountRegister(){
+      if(myntrAnalytics.debug) console.log(`%c pushAccountRegister() called.`, "color:green;font-size:16px;");
+
+      pushEvent({
+        'event': 'account_register',
+        'user_id': '{{- customer.id -}}'
+      });
+    }
+
+    /**
+    * Account Login Event
+    */
+    function pushAccountLogin(){
+      if(myntrAnalytics.debug) console.log(`%c pushAccountLogin() called.`, "color:green;font-size:16px;");
+
+      pushEvent({
+        'event': 'account_login',
+        'user_id': '{{- customer.id -}}'
+      });
+    }
+
+
+    {% if checkout %}
+      /**
+      * checkout.liquid Checkout Steps
+      * This code has a lifespan until August 2024!
+      * https://changelog.shopify.com/posts/the-checkout-liquid-theme-file-is-being-deprecated
+      */
+      async function pushCheckout(){
+        if(!Shopify.Checkout || !Shopify.Checkout.step || Shopify.Checkout.step == 'thank_you') return;
+
+        if(myntrAnalytics.debug) console.log(`%c pushCheckout() called.`, "color:green;font-size:16px;");
+
+        //determine event name and step number
+        let event, step;
+        switch (Shopify.Checkout.step) {
+          case "contact_information":
+            event = "contact info"
+            step = '2'
+            break;
+          case "shipping_method":
+            event = "shipping method"
+            step = '3'
+            break;
+          case "payment_method":
+            event = "payment"
+            step = '4'
+            break;
+          default:
+            break;
+        }
+
+        //get checkout line item datalayer values
+        {% capture checkout_items_datalayer %}
+          [
+          {%- for line_item in checkout.line_items -%}
+            {%- render 'product-datalayer',
+               _product: line_item.product,
+               _variant: line_item.variant,
+               _quantity: line_item.quantity
+            -%}
+            {%- unless forloop.last %},{%- endunless -%}
+          {%- endfor -%}
+          ]
+        {% endcapture %}
+
+        const items = {{- checkout_items_datalayer | strip_newlines -}};
+
+        if(items.length == 0 ) return;
+
+        // push event
+        pushEvent({ ecommerce: null }); // Clear previous ecommerce object
+
+        pushEvent({
+          'event': event,
+          'ecommerce': {
+            'currency': {{ checkout.currency | json }},
+            'value': {{ checkout.total_price | money_without_currency }},
+            'checkout_step': step,
+            //'checkout_option': option,
+            'gift': false,                  // Is the order a gift?  true or false value only
+            'items': items
+          }
+        });
+
+      }
+    {% endif %}
+
+
+    /*
+      =========================================================================================
+        Main Thread
+      =========================================================================================
+    */
+
+    function myntrDataLayer(){
+      if(myntrAnalytics.debug) console.log(`%c myntrDataLayer() called.`, "color:green;font-size:16px;");
+
+      // push the page view event
+      pushPageView();
+
+      {% if template contains 'product' %}
+        // push the view product event if we are on a product page
+        pushViewItem();
+      {% endif %}
+
+      {% if template contains 'cart' %}
+        // push the view cart event if we are on the cart page
+        pushViewStaticCart();
+      {% endif %}
+
+      {% if template contains 'customer' and customer %}
+        // Initialize account_register and account_login events
+        const accountRegister = document.querySelector(myntrSelectors.accountRegister);
+        const accountLogin = document.querySelector(myntrSelectors.accountLogin);
+        if(accountRegister) pushAccountRegister();
+        if(accountLogin) pushAccountLogin();
+      {% endif %}
+
+      // Initalize our event listeners.
+      setTimeout(() =>{
+        initEventListeners();
+      }, 100);
+
+      // Initialize our observers
+      initObservers();
+
+      // Checkout Step Events
+      {% if checkout %}
+        pushCheckout();
+      {% endif %}
+
+    } //END: myntrDataLayer();
+
+
+    // Start DataLayer on Document Ready
+    function docReady(fn) {
+      document.addEventListener("DOMContentLoaded", fn);
+      if (document.readyState === "interactive" || document.readyState === "complete" ) {
+        fn();
+      }
+    }
+    docReady(() => {
+      myntrDataLayer();
+    });
+
+
+  })();
+</script>

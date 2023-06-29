@@ -1,0 +1,19 @@
+{%- layout none -%}
+
+{%- capture datalayer_json -%}
+{
+  "items":[
+  {%- for line_item in cart.items -%}
+    {%- render 'product-datalayer',
+       _product: line_item.product,
+       _variant: line_item.variant,
+       _quantity: line_item.quantity
+    -%}
+    {%- unless forloop.last %},{%- endunless -%}
+  {%- endfor -%}
+  ],
+  "total_price": {{- cart.total_price | money_without_currency | remove: ',' -}}
+}
+{%- endcapture -%}
+
+{{- datalayer_json | strip_newlines -}}
