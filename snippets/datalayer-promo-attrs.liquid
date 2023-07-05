@@ -1,0 +1,95 @@
+{%- comment -%}
+
+DataLayer Promotion Settings Output as Data Attributes
+Usage:
+{% render 'datalayer-promo-attrs', _object: block %}
+@param - _object - Section or Block object
+
+
+Schema Required for Snippet
+----------------------------
+{
+  "type": "header",
+  "content": "GTM Data Layer Promotion Settings"
+},
+{
+  "type": "text",
+  "id": "gtm_promotion_name",
+  "label": "Promotion Name",
+  "info": "Promotion name (context-specific)"
+},
+{
+  "type": "text",
+  "id": "gtm_promotion_id",
+  "label": "Promotion ID",
+  "info": "Promotion ID (context-specific)"
+},
+{
+  "type": "text",
+  "id": "gtm_creative_name",
+  "label": "Creative Name",
+  "info": "Name of the creative associated with the promotion"
+},
+{
+  "type": "text",
+  "id": "gtm_creative_slot",
+  "label": "Creative Slot",
+  "info": "Name of the slot where the creative was shown"
+},
+{
+  "type": "text",
+  "id": "gtm_location_id",
+  "label": "Location ID",
+  "info": "Where the promotion was located on the page when it was shown"
+}
+
+{%- endcomment -%}
+
+{%- liquid
+  assign _settings = _object.settings | default: nil
+  if _settings
+    assign enable = false
+
+    assign setting_promo_id = _settings.gtm_promotion_id | escape
+    assign setting_promo_name = _settings.gtm_promotion_name | escape
+    assign setting_creative_name =  _settings.gtm_creative_name | escape
+    assign setting_creative_slot =  _settings.gtm_creative_slot | escape
+    assign setting_location_id = _settings.gtm_location_id | escape
+
+    assign promo_id = 'data-gtm-promotion-id' | append: '="' | append: setting_promo_id | append: '"'
+    assign promo_name = 'data-gtm-promotion-name' | append: '="' | append: setting_promo_name | append: '"'
+    assign creative_name = 'data-gtm-creative-name' | append: '="' | append: setting_creative_name | append: '"'
+    assign creative_slot = 'data-gtm-creative-slot' | append: '="' | append: setting_creative_slot | append: '"'
+    assign location_id = 'data-gtm-location-id' | append: '="' | append: setting_location_id | append: '"'
+    assign trigger_name = 'data-datalayer-trigger="view_promotion"'
+
+    if setting_promo_id != blank
+      echo promo_id
+      assign enable = true
+    endif
+
+    if setting_promo_name != blank
+      echo promo_name
+      assign enable = true
+    endif
+
+    if setting_creative_name != blank
+      echo creative_name
+      assign enable = true
+    endif
+
+    if setting_creative_slot != blank
+      echo creative_slot
+      assign enable = true
+    endif
+
+    if setting_location_id != blank
+      echo location_id
+      assign enable = true
+    endif
+
+    if enable
+      echo trigger_name
+    endif
+  endif
+-%}

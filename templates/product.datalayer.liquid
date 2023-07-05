@@ -1,0 +1,20 @@
+{%- liquid
+  # New product template for GA4 DataLayer
+  layout none
+  # check the URL for any parameters to help us select specific instances
+  capture queryString
+    render 'get-query-string'
+  endcapture
+  assign selling_plan_id = ""
+  if queryString != blank
+    assign queryStringArray = queryString | split: "&"
+    for queryPart in queryStringArray
+      assign key = queryPart | split: "=" | first
+      assign value = queryPart | split: "=" | last
+      if key == "selling_plan"
+        assign selling_plan_id = value
+      endif
+    endfor
+  endif
+  render 'product-datalayer', _product: product, selling_plan_id: selling_plan_id
+-%}
