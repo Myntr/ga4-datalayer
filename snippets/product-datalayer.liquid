@@ -1,0 +1,111 @@
+{%- liquid
+  assign _product = _product | default: product
+  assign _variant = _variant | default: _product.selected_or_first_available_variant
+
+  # Specified quantity
+  assign _quantity = _quantity | default: 1
+
+  # Pricing
+  assign price = _variant.price | money_with_currency
+
+  capture item_regular_price
+    if _variant.compare_at_price
+      echo _variant.compare_at_price | default: 0
+    else
+      echo _variant.price | default: 0
+    endif
+  endcapture
+  assign item_regular_price = item_regular_price | plus: 0
+
+  capture item_sale_status
+    if _variant.compare_at_price and _variant.compare_at_price > _variant.price
+      echo "On Sale"
+    else
+      echo "Regular Price"
+    endif
+  endcapture
+
+  # Line item, used to pull data such as selling_plan, or price after the selling plan discount.
+  assign _line_item = _line_item | default: nil
+  assign frequency = frequency | default: "One-time purchase"
+  if _line_item
+    if _line_item.selling_plan_allocation
+      assign frequency = _line_item.selling_plan_allocation.selling_plan.name
+    endif
+    assign price = _line_item.price
+  endif
+
+  # Alternatively, check for the selling_plan via url id param
+  assign selling_plan_id = selling_plan_id | default: nil
+  if selling_plan_id
+    assign selling_plan_id = selling_plan_id | plus: 0
+    if _variant.selling_plan_allocations.size > 0
+      for selling_plan_allocation in _variant.selling_plan_allocations
+        assign selling_plan = selling_plan_allocation.selling_plan
+        unless selling_plan.id == selling_plan_id
+          continue
+        else
+          assign frequency = selling_plan.name
+          break
+        endunless
+      endfor
+    endif
+  endif
+
+  # Determine the option index for color and size, start them off as an impossible number, this will help us leave the value empty if the index isn't found.
+  assign color_option_index = 3
+  assign size_option_index = 3
+  for option in _product.options
+    assign normalized_option = option | handleize
+    if normalized_option contains 'color'
+      assign color_option_index = forloop.index0
+    elsif normalized_option contains 'size'
+      assign size_option_index = forloop.index0
+    endif
+  endfor
+
+  # Use the determined option index to get the correct variant option
+  assign item_size = _variant.options[size_option_index] | default: ""
+
+  # Item List Name and Id (for List Item View)
+  assign _item_list_name = _item_list_name | default: ""
+  assign _item_list_id = _item_list_id | default: ""
+
+  # Unless directly specified, use Collection title and id for List Views
+  if collection and _item_list_name == ""
+    assign _item_list_name = collection.title
+  endif
+  if collection and _item_list_id == ""
+    assign _item_list_id = collection.id
+  endif
+-%}
+
+{%- capture datalayer_json -%}
+{
+"item_name": {{- _product.title | json -}},
+"item_id": {{- _product.id | json -}},
+"brand": {{- _product.vendor | json -}},
+"quantity": {{- _quantity | json -}},
+"price": {{- price | money_without_currency -}},
+"item_regular_price": {{ item_regular_price | money_without_currency }},
+"item_variant_name": {{ _variant.title | json }},
+"item_variant_id": {{ _variant.id | json }},
+"frequency": {{ frequency | json }},
+"item_color": {{- item_color | json -}},
+"item_color_position": "",
+"item_size": {{- item_size | json -}},
+"affiliation": {{- _product.metafields.datalayer.affiliation | default: shop.name | replace: "&#39;", "'" | json -}},
+"item_sale_status": {{ item_sale_status | json }},
+"item_category": {{- _product.metafields.datalayer.item_category | default: _product.type | json -}},
+"item_category2": {{- _product.metafields.datalayer.item_category2 | default: "" | json -}},
+"item_category3": {{- _product.metafields.datalayer.item_category3 | default: "" | json -}},
+"item_category4": {{- _product.metafields.datalayer.item_category4 | default: "" | json -}},
+"item_category5": {{- _product.metafields.datalayer.item_category5 | default: "" | json -}},
+"item_star_rating": {{- _product.metafields.yotpo.reviews_average | default: "" | json -}},
+"item_number_reviews": {{- _product.metafields.yotpo.reviews_count | default: "" | json -}},
+"item_list_name": {{- _item_list_name | json -}},
+"item_list_id": {{- _item_list_id | json -}}
+}
+{%- endcapture -%}
+
+{{- datalayer_json | strip_newlines -}}

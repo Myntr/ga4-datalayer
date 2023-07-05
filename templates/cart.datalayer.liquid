@@ -1,0 +1,22 @@
+{%- layout none -%}
+
+{%- capture datalayer_json -%}
+{
+  "items":[
+  {%- for line_item in cart.items -%}
+    {%- render 'product-datalayer',
+      _product: line_item.product,
+      _variant: line_item.variant,
+      _quantity: line_item.quantity,
+      _line_item: line_item
+    -%}
+    {%- unless forloop.last %},{%- endunless -%}
+  {%- endfor -%}
+  ],
+  "total_price": {{- cart.total_price | money_without_currency | remove: ',' -}}
+  "gift": {% if cart.note != blank %}true{% else %}false{% endif %}
+  {% comment %} #CUSTOM CLIENT EVENT - Determine gift status based on cart note {% endcomment %}
+}
+{%- endcapture -%}
+
+{{- datalayer_json | strip_newlines -}}

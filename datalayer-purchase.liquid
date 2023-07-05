@@ -1,0 +1,77 @@
+{%- capture order_items_datalayer -%}
+  [
+  {%- for line_item in order.line_items -%}
+    {%- liquid
+      assign _product = line_item.product
+      assign _variant = line_item.variant
+
+      # Determine the option index for color and size, start them off as an impossible number, this will help us leave the value empty if the index isn't found.
+      assign color_option_index = 3
+      assign size_option_index = 3
+      for option in _product.options
+        assign normalized_option = option | handleize
+        if normalized_option contains 'color'
+          assign color_option_index = forloop.index0
+        elsif normalized_option contains 'size'
+          assign size_option_index = forloop.index0
+        endif
+      endfor
+
+      # Use the determined option index to get the correct variant option
+      assign item_color = _variant.options[color_option_index] | default: ""
+      assign item_size = _variant.options[size_option_index] | default: ""
+    -%}
+    {
+    "item_name": {{- _product.title | json -}},
+    "item_id": {{- _product.id | json -}},
+    "brand": {{- _product.vendor | json -}},
+    "quantity": {{- line_item.quantity | json -}},
+    "price": {{- line_item.final_price | money_without_currency | remove: ',' -}},
+    "item_regular_price": {%- if _product.compare_at_price -%}{{- _product.compare_at_price | default: 0 | money_without_currency | remove: ',' -}}{%- else -%}{{- _product.price | default: 0 | money_without_currency | remove: ',' -}}{%- endif -%},
+    "item_variant_name": {{ _variant.title | json }},
+    "item_variant_id": {{ _variant.id | json }},
+    "item_color": {{- item_color | default: "" | json -}},
+    "item_color_position": "",
+    "item_size": {{- item_size | default: "" | json -}},
+    "affiliation": {{- _product.metafields.datalayer.affiliation | default: shop.name | replace: "&#39;", "'" | json -}},
+    "item_sale_status": "{%- if _product.compare_at_price and _product.compare_at_price > _product.price -%}On Sale{%- else -%}Regular Price{%- endif -%}",
+    "item_category": {{- _product.metafields.datalayer.item_category | default: _product.type | json -}},
+    "item_category2": {{- _product.metafields.datalayer.item_category2 | default: "" | json -}},
+    "item_category3": {{- _product.metafields.datalayer.item_category3 | default: "" | json -}},
+    "item_category4": {{- _product.metafields.datalayer.item_category4 | default: "" | json -}},
+    "item_category5": {{- _product.metafields.datalayer.item_category5 | default: "" | json -}},
+    "item_star_rating": {{- _product.metafields.yotpo.reviews_average | default: "" | json -}},
+    "item_number_reviews": {{- _product.metafields.yotpo.reviews_count | default: "" | json -}},
+    "item_list_name": "",
+    "item_list_id": ""
+    }
+    {%- unless forloop.last %},{%- endunless -%}
+  {%- endfor -%}
+  ]
+{%- endcapture -%}
+{% if first_time_accessed %}
+<script>
+  const items = {{ order_items_datalayer | strip_newlines }};
+
+  let discounts = [];
+  {% for discount_application in order.discount_applications %}
+    discounts.push("{{ discount_application.title }}");
+  {% endfor %}
+
+  // push event
+  window.dataLayer.push({
+    'event': 'purchase',
+    'ecommerce': {
+      'affiliation': '',
+      'currency': "USD",
+      'transaction_id': {{- order.order_number | json -}},
+      'value': {{- order.total_price | money_without_currency | json -}},
+      'tax': {{- order.tax_price | money_without_currency | json -}},
+      'shipping': {{- order.shipping_price | money_without_currency | json -}},
+      'coupon': discounts.toString(),
+      'gift': false,
+      'items': items
+    }
+  });
+</script>
+{% endif %}
