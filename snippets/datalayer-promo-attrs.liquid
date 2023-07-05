@@ -48,6 +48,7 @@ Schema Required for Snippet
 {%- liquid
   assign _settings = _object.settings | default: nil
   if _settings
+    assign enable = false
 
     assign setting_promo_id = _settings.gtm_promotion_id | escape
     assign setting_promo_name = _settings.gtm_promotion_name | escape
@@ -62,29 +63,33 @@ Schema Required for Snippet
     assign location_id = 'data-gtm-location-id' | append: '="' | append: setting_location_id | append: '"'
     assign trigger_name = 'data-datalayer-trigger="view_promotion"'
 
-    if _settings.gtm_promotion_id != blank
+    if setting_promo_id != blank
       echo promo_id
       assign enable = true
     endif
-    if _settings.gtm_promotion_id != blank
+
+    if setting_promo_name != blank
       echo promo_name
       assign enable = true
     endif
-    if _settings.gtm_promotion_id != blank
+
+    if setting_creative_name != blank
       echo creative_name
       assign enable = true
     endif
-    if _settings.gtm_promotion_id != blank
+
+    if setting_creative_slot != blank
       echo creative_slot
       assign enable = true
     endif
-    if _settings.gtm_promotion_id != blank
+
+    if setting_location_id != blank
       echo location_id
       assign enable = true
     endif
+
     if enable
       echo trigger_name
     endif
-
   endif
 -%}

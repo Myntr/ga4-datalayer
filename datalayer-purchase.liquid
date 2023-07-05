@@ -10,9 +10,9 @@
       assign size_option_index = 3
       for option in _product.options
         assign normalized_option = option | handleize
-        if normalized_option == 'color'
+        if normalized_option contains 'color'
           assign color_option_index = forloop.index0
-        elsif normalized_option == 'size'
+        elsif normalized_option contains 'size'
           assign size_option_index = forloop.index0
         endif
       endfor
