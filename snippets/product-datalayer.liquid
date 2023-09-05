@@ -65,6 +65,7 @@
   endfor
 
   # Use the determined option index to get the correct variant option
+  assign item_color = _variant.options[color_option_index] | default: ""
   assign item_size = _variant.options[size_option_index] | default: ""
 
   # Item List Name and Id (for List Item View)
