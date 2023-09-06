@@ -1,12 +1,17 @@
 {%- liquid
+  assign _line_item = _line_item | default: nil
   assign _product = _product | default: product
   assign _variant = _variant | default: _product.selected_or_first_available_variant
+
+  if _line_item
+    assign _variant = _line_item.variant
+  endif
 
   # Specified quantity
   assign _quantity = _quantity | default: 1
 
   # Pricing
-  assign price = _variant.price | money_with_currency
+  assign price = _variant.price | money_without_currency
 
   capture item_regular_price
     if _variant.compare_at_price
@@ -26,7 +31,6 @@
   endcapture
 
   # Line item, used to pull data such as selling_plan, or price after the selling plan discount.
-  assign _line_item = _line_item | default: nil
   assign frequency = frequency | default: "One-time purchase"
   if _line_item
     if _line_item.selling_plan_allocation
