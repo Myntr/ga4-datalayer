@@ -23,7 +23,7 @@
     ---------------------
     Themes may require specific events depending on installed 3rd parties/apps.
     These specific events are marked by the following comment:
-    // #CUSTOM CLIENT EVENT3
+    // #CUSTOM CLIENT EVENT
     You can search for this comment line within the GA4 files in order to find & modify custom events.
 
     REQUIREMENTS
@@ -65,7 +65,7 @@
   endcomment
 %}
 {% comment %}
-  We could find usage of the JS Shopify formatMoney funciton but no definition, throwing this in here to prevent errors.
+  Shopify formatMoney function
 {% endcomment %}
 <script>
   var Shopify = Shopify || {};
@@ -206,6 +206,22 @@
 
       function initEventListeners(){
         if(myntrAnalytics.debug) console.log(`%c initEventListeners() called.`, "color:green;font-size:16px;");
+
+        // #CUSTOM CLIENT EVENT - Selected Swatch Change
+        {% if template contains 'product' %}
+          // Initialize pdp swatch change event listener
+          document.addEventListener('pdp:swatch:changed', (data) => {
+            fetch(`/products/${data.detail.handle}?view=datalayer`, { method: 'GET' })
+            .then(response => response.json())
+            .then((data) => {
+              const item = data;
+              pushViewItem(item);
+            })
+            .catch((error) => {
+              console.error(error);
+            });
+          },false);
+        {% endif %}
 
         // Initialize add_to_cart event listeners
         document.addEventListener('cart:item:added', (data) => {
@@ -834,23 +850,22 @@
       function pushViewItem(_item = null){
 
         //Timeout to correctly get swatch data
-        setTimeout(() => {
+        setTimeout(() => { // #CUSTOM CLIENT EVENT - Timeout may NOT be needed!
           if(myntrAnalytics.debug) console.log(`%c pushViewItem() view_item event.`, "color:green;font-size:16px;");
 
           let item = {% render 'product-datalayer', _product: product %};
           if(_item != null) item = _item;
 
-          //Selected Swatch Postion
+          //Selected Swatch Position
           // #CUSTOM CLIENT EVENT - Selected Swatch
-          let pdpColorSwatches = document.querySelectorAll('.js-product-option-color');
-          if(pdpColorSwatches){
-            pdpColorSwatches.forEach((swatch) => {
-              if (swatch.checked) {
-                item.item_color_position = swatch.dataset.swatchPosition;
-              }
-            });
-            if(myntrAnalytics.debug) console.log(`%c Selected Swatch Postion: ${item.item_color_position}`, "color:green;font-size:16px;");
+          let pdpColorSwatches = document.querySelectorAll('.swatch__input');
+          for (const swatch of pdpColorSwatches) {
+            if (swatch.checked) {
+              item.item_color_position = swatch.dataset.swatchPosition;
+              break;
+            }
           }
+          if(myntrAnalytics.debug) console.log(`%c Selected Swatch Postion: ${item.item_color_position}`, "color:green;font-size:16px;");
 
           // Push Product Click Event
           pushProductClick(item);
@@ -910,15 +925,14 @@
 
         //Selected Swatch Postion
         // #CUSTOM CLIENT EVENT - Selected Swatch
-        let pdpColorSwatches = trigger.querySelectorAll('.js-product-option-color');
-        if(pdpColorSwatches){
-          pdpColorSwatches.forEach((swatch) => {
-            if (swatch.checked) {
-              item.item_color_position = swatch.dataset.swatchPosition;
-            }
-          });
-          if(myntrAnalytics.debug) console.log(`%c pos:${item.item_color_position}`, "color:green;font-size:16px;");
+        let pdpColorSwatches = document.querySelectorAll('.swatch__input');
+        for (const swatch of pdpColorSwatches) {
+          if (swatch.checked) {
+            item.item_color_position = swatch.dataset.swatchPosition;
+            break;
+          }
         }
+        if(myntrAnalytics.debug) console.log(`%c Selected Swatch Postion: ${item.item_color_position}`, "color:green;font-size:16px;");
 
         //Push event
         if(myntrAnalytics.debug) console.log(`%c pushViewItem() view_item event.`, "color:green;font-size:16px;");
@@ -998,7 +1012,7 @@
         for (let [i, cart_item] of data.detail.response.items.entries()) {
           if(myntrAnalytics.debug) console.log(cart_item);
           const item_quantity_added = parseInt(data.detail.items_added[i].quantity);
-          const item_selling_plan = data.detail.items_added[i].selling_plan;
+          const item_selling_plan = data.detail.items_added[i].selling_plan; //#CUSTOM CLIENT EVENT - Subscriptions
           let sellingPlanParameter = ""
           if(item_selling_plan){
             sellingPlanParameter = `&selling_plan=${item_selling_plan}`;
@@ -1023,16 +1037,14 @@
 
           // Selected Swatch Postion
           // #CUSTOM CLIENT EVENT - Selected Swatch
-          if(dl_add_to_cart_location == add_to_cart_locations.pdp_add_to_cart) { //If on PDP get swatch position
-            let pdpColorSwatches = document.querySelectorAll('.js-product-option-color');
-            if(pdpColorSwatches){
-              pdpColorSwatches.forEach((swatch) => {
-                if (swatch.checked) {
-                  item.item_color_position = swatch.dataset.swatchPosition;
-                }
-              });
+          let pdpColorSwatches = document.querySelectorAll('.swatch__input');
+          for (const swatch of pdpColorSwatches) {
+            if (swatch.checked) {
+              item.item_color_position = swatch.dataset.swatchPosition;
+              break;
             }
           }
+          if(myntrAnalytics.debug) console.log(`%c Selected Swatch Postion: ${item.item_color_position}`, "color:green;font-size:16px;");
 
           //Update quantity
           item.quantity = item_quantity_added;
