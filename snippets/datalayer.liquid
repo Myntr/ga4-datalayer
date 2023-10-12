@@ -210,7 +210,7 @@
         // #CUSTOM CLIENT EVENT - Selected Swatch Change
         {% if template contains 'product' %}
           // Initialize pdp swatch change event listener
-          document.addEventListener('pdp:swatch:changed', (data) => {
+          document.addEventListener('pdp:swatch:change', (data) => {
             fetch(`/products/${data.detail.handle}?view=datalayer`, { method: 'GET' })
             .then(response => response.json())
             .then((data) => {
@@ -254,12 +254,23 @@
         // on submit of a contact form the grab the email.
         document.addEventListener('submit', function(event) {
           const trigger = event.target;
-          if(!trigger.classList.contains('contact-form')) return;
           const emailInput = trigger.querySelector('input[name="contact[email]"]');
           if(!emailInput) return;
           const email = emailInput.value;
           sessionStorage.setItem(myntrAnalytics.sessionStorageEngagementEmail, email);
         }, false);
+
+        // ..OR.. create simpler action below
+
+        // Initialize footer email optin
+        {% comment %} document.querySelectorAll(myntrSelectors.emailOptIn).forEach(form => {
+          form.addEventListener('submit', function (e) {
+            if(myntrAnalytics.debug) console.log(`%c email_optin event`, "color:green;font-size:16px;");
+            pushEvent({
+              'event': 'email_optin'
+            });
+          });
+        }); {% endcomment %}
 
         // Initialize select_promotion event listeners
         const selectPromotionTriggers = document.querySelectorAll(myntrSelectors.promotion);
@@ -286,16 +297,6 @@
 
         },false);
 
-        // TODO: what to do....
-        // Initialize footer email optin
-        {% comment %} document.querySelectorAll(myntrSelectors.emailOptIn).forEach(form => {
-          form.addEventListener('submit', function (e) {
-            if(myntrAnalytics.debug) console.log(`%c email_optin event`, "color:green;font-size:16px;");
-            pushEvent({
-              'event': 'email_optin'
-            });
-          });
-        }); {% endcomment %}
       }
 
 
@@ -753,6 +754,11 @@
 
         if (cartDrawer) {
           observer.observe(cartDrawer);
+        } else {
+          // Initialize cart open event if cart drawer is not found
+          document.addEventListener('cart:drawer:open', (data) => {
+            pushViewDynamicCart();
+          },false);
         }
       }
 
@@ -1009,7 +1015,7 @@
         let items = [];
 
         //iterate over cart response items
-        for (let [i, cart_item] of data.detail.response.items.entries()) {
+        for (let [i, cart_item] of data.detail.cart.items.entries()) {
           if(myntrAnalytics.debug) console.log(cart_item);
           const item_quantity_added = parseInt(data.detail.items_added[i].quantity);
           const item_selling_plan = data.detail.items_added[i].selling_plan; //#CUSTOM CLIENT EVENT - Subscriptions
@@ -1100,7 +1106,7 @@
           if(items.length === data.detail.items_changed.length) break;
 
           //iterate over items_changed to find matching items, and get quantity
-          for (let [i, cart_item] of data.detail.response.items.entries()) {
+          for (let [i, cart_item] of data.detail.cart.items.entries()) {
             if(cart_item.key != event_item.id){
               continue;
             }
