@@ -59,6 +59,7 @@
   {% endfor %}
 
   // push event
+  window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({
     'event': 'purchase',
     'ecommerce': {
