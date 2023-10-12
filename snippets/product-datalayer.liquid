@@ -36,7 +36,7 @@
     if _line_item.selling_plan_allocation
       assign frequency = _line_item.selling_plan_allocation.selling_plan.name
     endif
-    assign price = _line_item.price
+    assign price = _line_item.price | money_without_currency
   endif
 
   # Alternatively, check for the selling_plan via url id param
@@ -91,7 +91,7 @@
 "item_id": {{- _product.id | json -}},
 "brand": {{- _product.vendor | json -}},
 "quantity": {{- _quantity | json -}},
-"price": {{- price | money_without_currency -}},
+"price": {{- price -}},
 "item_regular_price": {{ item_regular_price | money_without_currency }},
 "item_variant_name": {{ _variant.title | json }},
 "item_variant_id": {{ _variant.id | json }},
