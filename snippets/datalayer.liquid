@@ -985,7 +985,7 @@
 
         if(event){
           if(myntrAnalytics.debug) console.log(event);
-          const event_type = event.eventType;
+          const event_type = event.type;
 
           //Determine more specific add to cart location
           if (add_to_cart_locations[event_type]) {
@@ -1008,55 +1008,38 @@
               dl_add_to_cart_location = '{{ template.name | capitalize }} Add To Cart'
             {% endif %}
           }
-          event_source = event.eventSource;
         }
 
         // Get product data
         let items = [];
 
-        //iterate over cart response items
-        for (let [i, cart_item] of data.detail.cart.items.entries()) {
+        //fetch cart items in datalayer format
+        const cart = await fetchCart();
+
+        //iterate over items added
+        for(const product of data.detail.items_added){
+
+          //find matching cart item
+          let cart_item = cart.items.find((i) => i.item_variant_id == product.id);
           if(myntrAnalytics.debug) console.log(cart_item);
-          const item_quantity_added = parseInt(data.detail.items_added[i].quantity);
-          const item_selling_plan = data.detail.items_added[i].selling_plan; //#CUSTOM CLIENT EVENT - Subscriptions
-          let sellingPlanParameter = ""
-          if(item_selling_plan){
-            sellingPlanParameter = `&selling_plan=${item_selling_plan}`;
-          }
-          // if this was triggered from rebuy, take the cart_item as is, since it is already formated.
-          // start us off by setting item to cart_item to avoid the fetch.
-          let item = cart_item;
-          if(event && event_source == "rebuy"){ // #CUSTOM CLIENT EVENT - REBUY
-            if(myntrAnalytics.debug) console.log("Using the cart_item given.")
-          } else {
-            if(myntrAnalytics.debug) console.log("Fetching the product in preferred datalayer format");
-            // if this was not triggered from rebuy, fetch the item in our preferred format.
-            item = await fetch(`/products/${cart_item.handle}?variant=${cart_item.variant_id}${sellingPlanParameter}&view=datalayer`, { method: 'GET' })
-            .then(response => response.json())
-            .then((data) => {
-              return data;
-            })
-            .catch((error) => {
-              console.error(error);
-            });
-          }
+          if(!cart_item) return;
 
           // Selected Swatch Postion
           // #CUSTOM CLIENT EVENT - Selected Swatch
-          let pdpColorSwatches = document.querySelectorAll('.swatch__input');
+          let pdpColorSwatches = document.querySelectorAll('.js-product-option-color');
           for (const swatch of pdpColorSwatches) {
             if (swatch.checked) {
-              item.item_color_position = swatch.dataset.swatchPosition;
+              cart_item.item_color_position = swatch.dataset.swatchPosition;
               break;
             }
           }
-          if(myntrAnalytics.debug) console.log(`%c Selected Swatch Postion: ${item.item_color_position}`, "color:green;font-size:16px;");
+          if(myntrAnalytics.debug) console.log(`%c Selected Swatch Postion: ${cart_item.item_color_position}`, "color:green;font-size:16px;");
 
           //Update quantity
-          item.quantity = item_quantity_added;
+          cart_item.quantity = parseInt(product.quantity);
 
           //Push item to array
-          items.push(item);
+          items.push(cart_item);
         }
 
         if(items.length == 0) return;
@@ -1084,74 +1067,37 @@
 
         if(myntrAnalytics.debug) console.log(data.detail);
 
-        const event_type = data.detail.event.eventType;
-        let dl_event_name = '';
+        const event_type = data.detail.event?.type;
         let dl_event_location = '';
-
-        if(event_type === 'mini-cart-item-remove'){
-          dl_event_name = 'remove_from_cart';
-          dl_event_location = add_to_cart_locations.mini_cart_remove;
-        } else if(event_type === 'mini-cart-item-quantity-remove'){
-          dl_event_name = 'remove_from_cart';
-          dl_event_location = add_to_cart_locations.mini_cart_qty_decrease;
-        } else if(event_type === 'mini-cart-item-quantity-add'){
-          dl_event_name = 'add_to_cart';
+        if(event_type === 'add_to_cart'){
           dl_event_location = add_to_cart_locations.mini_cart_qty_increase;
         }
 
         // Get product data
         let items = [];
 
-        for (let [i, event_item] of data.detail.items_changed.entries()) {
-          if(items.length === data.detail.items_changed.length) break;
+        //fetch cart items in datalayer format
+        const cart = await fetchCart();
 
-          //iterate over items_changed to find matching items, and get quantity
-          for (let [i, cart_item] of data.detail.cart.items.entries()) {
-            if(cart_item.key != event_item.id){
-              continue;
-            }
+        //iterate over items added
+        for(const product of data.detail.items_changed){
+          //find matching cart item
+          let cart_item = cart.items.find((i) => i.item_variant_id == product.id);
+          if(myntrAnalytics.debug) console.log(cart_item);
+          if(!cart_item) return;
 
-            //fetch datalayer details for each item
-            const item = await fetch(`/products/${cart_item.handle}?variant=${cart_item.variant_id}&view=datalayer`, { method: 'GET' })
-            .then(response => response.json())
-            .then((data) => {
-              return data;
-            })
-            .catch((error) => {
-              console.error(error);
-            });
+          //Update quantity
+          cart_item.quantity = parseInt(data.detail.event?.quantity_changed);
 
-            //Update quantity, pulled from the custom event.
-            item.quantity = event_item.quantity_changed;
-
-            // bundle values, pulled from the cart item.
-            // #CUSTOM CLIENT EVENT - Rumpl Bundles
-            if(cart_item.hasOwnProperty('properties')){
-              if(cart_item.properties.hasOwnProperty('_bundle_master_title')){
-                item.bundle = true;
-                item.bundle_name = cart_item.properties._bundle_master_title;
-              }
-            }
-
-            // selling plans, pulled from the cart item.
-            if(cart_item.hasOwnProperty('selling_plan_allocation')){
-              if(cart_item.selling_plan_allocation.hasOwnProperty('selling_plan')){
-                item.frequency = cart_item.selling_plan_allocation.selling_plan.name;
-              }
-            } else {
-              item.frequency = "One-time purchase";
-            }
-
-            //Push item to array
-            items.push(item);
-          }
+          //Push item to array
+          items.push(cart_item);
         }
 
         if(items.length == 0) return;
 
         //create event object
         let eventObj = {
-          'event': dl_event_name,
+          'event': event_type,
           'ecommerce': {
             'currency': dl_currency_code,
             'items': items
@@ -1167,6 +1113,7 @@
         pushEvent({ ecommerce: null }); // Clear previous ecommerce object
         pushEvent(eventObj);
       }// END: pushCartItemQuantityChange()
+
 
       /**
       * Minicart View Event
