@@ -985,13 +985,13 @@
 
         if(event){
           if(myntrAnalytics.debug) console.log(event);
-          const event_type = event.type;
+          const event_type = event?.type;
 
           //Determine more specific add to cart location
-          if (add_to_cart_locations[event_type]) {
+          if (event_type && add_to_cart_locations[event_type]) {
             dl_add_to_cart_location = add_to_cart_locations[event_type];
           }
-          else if(event_type == "quick_view"){
+          else if(event_type && event_type == "quick_view"){
             {% if template contains 'product' %}
               dl_add_to_cart_location = add_to_cart_locations.pdp_upsell;
             {% elsif template contains 'collection' %}
@@ -1017,7 +1017,7 @@
         const cart = await fetchCart();
 
         //iterate over items added
-        for(const product of data.detail.items_added){
+        for(const product of data.detail.items){
 
           //find matching cart item
           let cart_item = cart.items.find((i) => i.item_variant_id == product.id);
@@ -1062,14 +1062,15 @@
       * Product Update/Remove Event
       */
       async function pushCartItemQuantityChange(data){
-        if(myntrAnalytics.debug) console.log(`%c pushCartItemQuantityChange() called.`, "color:green;font-size:16px;");
+        if(myntrAnalytics.debug) {
+          console.log(`%c pushCartItemQuantityChange() called.`, "color:green;font-size:16px;");
+          console.log(data.detail);
+        }
         if(!data) return;
-
-        if(myntrAnalytics.debug) console.log(data.detail);
 
         const event_type = data.detail.event?.type;
         let dl_event_location = '';
-        if(event_type === 'add_to_cart'){
+        if(event_type && event_type === 'add_to_cart'){
           dl_event_location = add_to_cart_locations.mini_cart_qty_increase;
         }
 
@@ -1080,14 +1081,16 @@
         const cart = await fetchCart();
 
         //iterate over items added
-        for(const product of data.detail.items_changed){
+        for(const product of data.detail.items){
           //find matching cart item
           let cart_item = cart.items.find((i) => i.item_variant_id == product.id);
           if(myntrAnalytics.debug) console.log(cart_item);
           if(!cart_item) return;
 
           //Update quantity
-          cart_item.quantity = parseInt(data.detail.event?.quantity_changed);
+          if(data.detail.event?.quantity_changed) {
+            cart_item.quantity = parseInt(data.detail.event?.quantity_changed);
+          }
 
           //Push item to array
           items.push(cart_item);
