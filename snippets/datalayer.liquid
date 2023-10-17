@@ -1084,8 +1084,17 @@
         for(const product of data.detail.items){
           //find matching cart item
           let cart_item = cart.items.find((i) => i.item_variant_id == product.id);
+
+          //if no matching item in cart, fetch the product template
+          if(!cart_item){
+            if(product.handle){
+              cart_item = await fetchProduct(product.handle, product.id)
+            } else {
+              return
+            }
+          }
+
           if(myntrAnalytics.debug) console.log(cart_item);
-          if(!cart_item) return;
 
           //Update quantity
           if(data.detail.event?.quantity_changed) {
@@ -1186,9 +1195,21 @@
       /**
       * Fetch product template with data layer values
       */
-      function fetchProduct(handle) {
+      function fetchProduct(handle, variantID = null, sellingPlanID = null) {
         if(!handle) return;
-        return fetch(`/products/${handle}?view=datalayer`, { method: 'GET' })
+
+        let variantParam = "";
+        let sellingPlanParam = "";
+
+        if(variantID) {
+          variantParam = `?variant=${variantID}`;
+        }
+
+        if(sellingPlanID) {
+          sellingPlanParam = `${sellingPlanID}`;
+        }
+
+        return fetch(`/products/${handle}${variantParam}${sellingPlanParam}&view=datalayer`, { method: 'GET' })
         .then(response => response.json())
         .then((data) => {
           return data;
