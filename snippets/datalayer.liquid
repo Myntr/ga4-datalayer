@@ -1202,14 +1202,14 @@
         let sellingPlanParam = "";
 
         if(variantID) {
-          variantParam = `?variant=${variantID}`;
+          variantParam = `&variant=${variantID}`;
         }
 
         if(sellingPlanID) {
-          sellingPlanParam = `${sellingPlanID}`;
+          sellingPlanParam = `&selling_plan=${sellingPlanID}`;
         }
 
-        return fetch(`/products/${handle}${variantParam}${sellingPlanParam}&view=datalayer`, { method: 'GET' })
+        return fetch(`/products/${handle}?view=datalayer${variantParam}${sellingPlanParam}`, { method: 'GET' })
         .then(response => response.json())
         .then((data) => {
           return data;
