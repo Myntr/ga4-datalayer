@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
 jobs:
   codacy-notification:
     uses: Myntr/myntr-shared/.github/workflows/codacy-notification.yml@main
