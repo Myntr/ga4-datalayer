@@ -1,0 +1,12 @@
+name: Shared Workflows
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  codacy-notification:
+    uses: Myntr/myntr-shared/.github/workflows/codacy-notification.yml@main
+    secrets:
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
