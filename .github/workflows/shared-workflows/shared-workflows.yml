@@ -1,0 +1,27 @@
+name: Shared Workflows
+
+on:
+  issue_comment: # Used for codacy-notification job
+    types: [created]
+  pull_request_review_comment: # Used for codacy-notification job
+    types: [created]
+  pull_request_review: # Used for changes-requested-notification job
+    types: [submitted]
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  codacy-notification:
+    uses: Myntr/myntr-shared/.github/workflows/codacy-notification.yml@main
+    secrets:
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+  changes-requested-notification:
+    uses: Myntr/myntr-shared/.github/workflows/changes-requested-notification.yml@main
+    secrets:
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
