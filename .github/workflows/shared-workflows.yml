@@ -13,6 +13,11 @@ permissions:
   pull-requests: write
   contents: read
 
+# Prevent multiple concurrent runs for the same PR
+concurrency:
+  group: shared-workflows-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   codacy-notification:
     uses: Myntr/myntr-shared/.github/workflows/codacy-notification.yml@main
